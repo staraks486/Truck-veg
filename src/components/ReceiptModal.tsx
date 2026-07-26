@@ -1,0 +1,327 @@
+import React, { useState, useEffect } from 'react';
+import { Order } from '../types';
+import { X, CheckCircle2, QrCode, Printer, Clock, AlertTriangle, ShieldCheck, Sparkles, Phone, Download, MessageSquare, FileText } from 'lucide-react';
+import QRCode from 'qrcode';
+import confetti from 'canvas-confetti';
+import { formatCurrency, formatWeightOrUnits } from '../utils/storageManager';
+import { formatOrderWhatsAppMessage, openWhatsAppShare } from '../utils/whatsappHelper';
+import { generateOrderPDF } from '../utils/pdfGenerator';
+
+interface ReceiptModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  order: Order | null;
+  onUpdateOrderStatus: (orderId: string, newStatus: Order['status'], paymentMethod?: 'UPI' | 'Cash' | 'Card') => void;
+}
+
+export const ReceiptModal: React.FC<ReceiptModalProps> = ({
+  isOpen,
+  onClose,
+  order,
+  onUpdateOrderStatus
+}) => {
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  useEffect(() => {
+    if (order && order.grandTotal > 0) {
+      const upiString = `upi://pay?pa=farmersgate@upi&pn=${encodeURIComponent(order.storeName)}&am=${order.grandTotal.toFixed(2)}&tr=${order.id}&cu=INR`;
+      QRCode.toDataURL(upiString, { width: 220, margin: 1 })
+        ? QRCode.toDataURL(upiString, { width: 220, margin: 1 }).then(setQrCodeDataUrl).catch(console.error)
+        : null;
+    }
+  }, [order]);
+
+  if (!isOpen || !order) return null;
+
+  const handleSimulatePayment = (method: 'UPI' | 'Cash' | 'Card') => {
+    setIsProcessingPayment(true);
+    setTimeout(() => {
+      onUpdateOrderStatus(order.id, 'paid', method);
+      setIsProcessingPayment(false);
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      } catch (e) {
+        // confetti fallback
+      }
+    }, 1000);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!order) return;
+    const msg = formatOrderWhatsAppMessage(order);
+    openWhatsAppShare(msg, order.customerPhone);
+  };
+
+  const handleDownloadPDF = () => {
+    if (!order) return;
+    generateOrderPDF(order, 'download');
+  };
+
+  const handleViewPDF = () => {
+    if (!order) return;
+    generateOrderPDF(order, 'open');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 my-auto">
+        {/* Top Header Status Bar */}
+        <div className={`p-4 text-white flex justify-between items-center ${
+          order.status === 'paid'
+            ? 'bg-emerald-700'
+            : order.status === 'approved'
+            ? 'bg-teal-800'
+            : order.status === 'rejected'
+            ? 'bg-rose-800'
+            : 'bg-amber-700'
+        }`}>
+          <div className="flex items-center gap-2">
+            {order.status === 'paid' && <CheckCircle2 className="w-5 h-5 text-emerald-300" />}
+            {order.status === 'approved' && <QrCode className="w-5 h-5 text-teal-300" />}
+            {order.status === 'sent_to_shopkeeper' && <Clock className="w-5 h-5 text-amber-300 animate-spin" />}
+            {order.status === 'rejected' && <AlertTriangle className="w-5 h-5 text-rose-300" />}
+
+            <div>
+              <h3 className="font-extrabold text-sm capitalize">
+                {order.status === 'paid'
+                  ? 'Payment Completed & Verified'
+                  : order.status === 'approved'
+                  ? 'Bill Finalized by Shopkeeper'
+                  : order.status === 'rejected'
+                  ? 'Order Declined'
+                  : 'Awaiting Shopkeeper Verification'}
+              </h3>
+              <p className="text-[11px] text-white/80 font-mono">
+                Order ID: #{order.id}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-white/20 transition-colors text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Printable Receipt Container */}
+        <div id="printable-receipt" className="p-6 bg-white space-y-5 text-slate-800">
+          {/* Store Info */}
+          <div className="text-center pb-4 border-b border-dashed border-slate-300">
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+              {order.storeName}
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Self-Checkout Produce Terminal • Fast Weigh & Pay
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {new Date(order.createdAt).toLocaleString('en-IN', {
+                dateStyle: 'medium',
+                timeStyle: 'short'
+              })}
+            </p>
+          </div>
+
+          {/* Customer Details */}
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs flex justify-between items-center">
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Customer Name</span>
+              <span className="font-bold text-slate-900">{order.customerName}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Mobile Number</span>
+              <span className="font-mono text-slate-800 font-semibold">{order.customerPhone}</span>
+            </div>
+          </div>
+
+          {/* Rejection Alert if rejected */}
+          {order.status === 'rejected' && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-rose-900">
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                Reason for rejection:
+              </p>
+              <p className="text-rose-700 pl-5">
+                {order.rejectionReason || "Out of stock or scale weight discrepancy. Please re-check produce items."}
+              </p>
+            </div>
+          )}
+
+          {/* Itemized Table */}
+          <div>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-300 text-slate-500 font-bold uppercase text-[10px]">
+                  <th className="py-2">Produce Item</th>
+                  <th className="py-2 text-center">Qty / Wt</th>
+                  <th className="py-2 text-right">Rate</th>
+                  <th className="py-2 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {order.items.map((item, idx) => (
+                  <tr key={idx} className="text-slate-800">
+                    <td className="py-2.5 font-bold text-slate-900">
+                      {item.name}
+                    </td>
+                    <td className="py-2.5 text-center font-mono font-medium">
+                      {formatWeightOrUnits(item.quantityOrWeight, item.unitType)}
+                    </td>
+                    <td className="py-2.5 text-right font-mono text-slate-500">
+                      {formatCurrency(item.pricePerUnit)}
+                    </td>
+                    <td className="py-2.5 text-right font-extrabold font-mono text-slate-900">
+                      {formatCurrency(item.totalPrice)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Total Breakdown */}
+          <div className="pt-3 border-t border-dashed border-slate-300 space-y-1 text-xs">
+            <div className="flex justify-between text-slate-600">
+              <span>Produce Subtotal</span>
+              <span className="font-mono font-semibold">{formatCurrency(order.subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-emerald-700 font-medium">
+              <span>Fresh Produce GST (0%)</span>
+              <span>₹0.00</span>
+            </div>
+            <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-base font-black text-slate-900">
+              <span>Grand Total</span>
+              <span className="text-lg text-emerald-800 font-mono">
+                {formatCurrency(order.grandTotal)}
+              </span>
+            </div>
+          </div>
+
+          {/* Payment Section according to Status */}
+          {order.status === 'sent_to_shopkeeper' && (
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-center space-y-2 animate-pulse">
+              <Clock className="w-8 h-8 text-amber-600 mx-auto" />
+              <h4 className="font-bold text-amber-900 text-sm">Waiting for Shopkeeper Verification</h4>
+              <p className="text-xs text-amber-700 max-w-xs mx-auto">
+                The shopkeeper is weighing your items on the counter scale. Once approved, your payment QR code will automatically appear here!
+              </p>
+            </div>
+          )}
+
+          {order.status === 'approved' && (
+            <div className="p-4 bg-teal-50 rounded-2xl border border-teal-200 text-center space-y-3 animate-fadeIn">
+              <div className="flex items-center justify-center gap-1.5 text-teal-900 font-bold text-xs">
+                <Sparkles className="w-4 h-4 text-teal-600" />
+                <span>Shopkeeper Approved • Scan & Pay via UPI</span>
+              </div>
+
+              {qrCodeDataUrl ? (
+                <div className="p-3 bg-white inline-block rounded-xl border border-teal-300 shadow-md">
+                  <img src={qrCodeDataUrl} alt="UPI Payment QR" className="w-40 h-40 mx-auto" />
+                  <p className="text-[10px] text-slate-500 font-mono mt-1">UPI ID: farmersgate@upi</p>
+                </div>
+              ) : (
+                <div className="w-40 h-40 bg-slate-200 rounded-xl mx-auto flex items-center justify-center text-xs text-slate-500">
+                  Generating Payment QR...
+                </div>
+              )}
+
+              <div className="pt-2">
+                <button
+                  onClick={() => handleSimulatePayment('UPI')}
+                  disabled={isProcessingPayment}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-98 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isProcessingPayment ? (
+                    <span>Verifying UPI Payment...</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Simulate UPI Payment ({formatCurrency(order.grandTotal)})</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {order.status === 'paid' && (
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-300 text-center space-y-2 animate-scaleUp">
+              <div className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto shadow-md">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <h4 className="font-extrabold text-emerald-950 text-base">Payment Verified!</h4>
+              <p className="text-xs text-emerald-800">
+                Paid via {order.paymentMethod || 'UPI'} • Receipt ID #{order.id}
+              </p>
+              <div className="p-2 bg-white rounded-lg border border-emerald-200 text-[11px] text-emerald-700 font-medium inline-block">
+                Thank you for shopping at {order.storeName}!
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Controls */}
+        <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* Share via WhatsApp */}
+            <button
+              onClick={handleShareWhatsApp}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+              title="Share Receipt on WhatsApp"
+            >
+              <MessageSquare className="w-4 h-4 fill-emerald-100 text-emerald-900" />
+              <span>WhatsApp</span>
+            </button>
+
+            {/* Download PDF */}
+            <button
+              onClick={handleDownloadPDF}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+              title="Download PDF Receipt"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              <span>Download PDF</span>
+            </button>
+
+            {/* View PDF */}
+            <button
+              onClick={handleViewPDF}
+              className="px-3 py-2 bg-white hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center gap-1.5"
+              title="Open PDF in new tab"
+            >
+              <FileText className="w-4 h-4 text-slate-600" />
+              <span>View PDF</span>
+            </button>
+
+            {/* Print */}
+            <button
+              onClick={handlePrint}
+              className="px-3 py-2 bg-white hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center gap-1.5"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden md:inline">Print</span>
+            </button>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="w-full sm:w-auto px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors text-center"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

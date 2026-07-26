@@ -1,0 +1,6 @@
+{
+  "name": "Instamart Fresh & Smart Counter POS",
+  "description": "An Instamart-style lightning-fast quick commerce fresh produce store app with live digital scales, counter POS terminal, automated bill verification, and shopkeeper owner dashboard.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,97 @@
+export type UserRole = 'customer' | 'shopkeeper';
+
+export type Category = 
+  | 'All'
+  | 'Daily Essentials'
+  | 'Root Vegetables'
+  | 'Leafy Greens'
+  | 'Exotic Fruits'
+  | 'Organic Herbs';
+
+export type UnitType = 'kg' | 'piece' | 'bunch';
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: Category;
+  pricePerUnit: number; // price per kg, per piece, or per bunch
+  unitType: UnitType;
+  stockQuantity: number; // e.g. 25.5 kg or 40 pieces
+  inStock: boolean;
+  image: string;
+  description: string;
+  origin: string;
+  isOrganic?: boolean;
+}
+
+export interface CartItem {
+  itemId: string;
+  item: InventoryItem;
+  quantityOrWeight: number; // in grams if kg (e.g. 500), or count if piece/bunch
+  calculatedPrice: number;
+}
+
+export type OrderStatus = 'sent_to_shopkeeper' | 'reviewed' | 'approved' | 'rejected' | 'paid';
+
+export interface OrderItem {
+  itemId: string;
+  name: string;
+  unitType: UnitType;
+  quantityOrWeight: number; // grams or units
+  pricePerUnit: number;
+  totalPrice: number;
+}
+
+export interface Order {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  storeName: string;
+  items: OrderItem[];
+  subtotal: number;
+  tax: number;
+  platformFee: number;
+  grandTotal: number;
+  status: OrderStatus;
+  rejectionReason?: string;
+  shopkeeperNote?: string;
+  createdAt: string;
+  updatedAt: string;
+  paymentMethod?: 'UPI' | 'Cash' | 'Card';
+}
+
+export interface CustomerSession {
+  name: string;
+  phone: string;
+  isLoggedIn: boolean;
+  scannedStore?: {
+    id: string;
+    name: string;
+    branch: string;
+    address: string;
+  } | null;
+}
+
+export interface CustomerRecord {
+  id: string;
+  name: string;
+  phone: string;
+  createdAt: string;
+  lastActive: string;
+  notes?: string;
+  totalOrders?: number;
+  totalSpent?: number;
+}
+
+export interface ProductOffer {
+  id: string;
+  itemId?: string; // specific item ID or 'ALL'
+  title: string;
+  discountPercentage?: number;
+  discountAmount?: number;
+  promoCode?: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+}
+
