@@ -17,6 +17,7 @@ import {
   Edit3,
   Send,
   AlertCircle,
+  AlertTriangle,
   Scale,
   Sparkles,
   Phone,
@@ -40,7 +41,8 @@ import {
   Truck,
   Tag,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  X
 } from 'lucide-react';
 import { 
   formatCurrency, 
@@ -89,6 +91,8 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   const [addItemSelectId, setAddItemSelectId] = useState('');
   const [rejectingOrderId, setRejectingOrderId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [cancelingOrderModal, setCancelingOrderModal] = useState<Order | null>(null);
+  const [cancelReasonInput, setCancelReasonInput] = useState<string>('Cancelled by shopkeeper');
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isSimulateCustomerModalOpen, setIsSimulateCustomerModalOpen] = useState(false);
 
@@ -100,6 +104,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   const [posCategory, setPosCategory] = useState<string>('All');
   const [posSearch, setPosSearch] = useState<string>('');
   const [posView, setPosView] = useState<'catalog' | 'checkout'>('catalog');
+  const [billSubTab, setBillSubTab] = useState<'queue' | 'checkout'>('queue');
 
   // Store Settings State
   const [storeConfig, setStoreConfig] = useState<StoreConfig>(getStoredStoreConfig());
@@ -295,14 +300,37 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     setEditedItems(updated);
   };
 
+  const handleRemoveItemFromOrderDirect = (order: Order, itemIdx: number) => {
+    if (order.items.length <= 1) {
+      setCancelingOrderModal(order);
+      setCancelReasonInput('Item cancelled / out of stock');
+      showToast(`Removing the last item will cancel Order #${order.id.slice(-4)}.`);
+      return;
+    }
+
+    const removedItem = order.items[itemIdx];
+    const updatedItems = order.items.filter((_, idx) => idx !== itemIdx);
+    onUpdateOrderWeights(order.id, updatedItems, order.shopkeeperNote);
+    showToast(`Removed "${removedItem.name}" from Order #${order.id.slice(-4)}.`);
+  };
+
   const handleRemoveItemFromOrder = (itemIdx: number) => {
     if (editedItems.length <= 1) {
+      if (editingOrderId) {
+        const currentOrd = orders.find(o => o.id === editingOrderId);
+        if (currentOrd) {
+          setCancelingOrderModal(currentOrd);
+          setCancelReasonInput('All items removed by shopkeeper');
+          return;
+        }
+      }
       showToast('An order must contain at least 1 item. Cancel the order if all items are removed.');
       return;
     }
+    const removed = editedItems[itemIdx];
     const updated = editedItems.filter((_, idx) => idx !== itemIdx);
     setEditedItems(updated);
-    showToast('Removed item from live order.');
+    showToast(`Removed "${removed?.name || 'item'}" from order draft.`);
   };
 
   const handleAddItemToOrder = (inventoryItemId: string) => {
@@ -342,13 +370,20 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   };
 
   const handleCancelOrder = (order: Order) => {
-    const reason = window.prompt(
-      `Cancel Order #${order.id} for ${order.customerName}?\nEnter cancellation reason (optional):`,
-      'Cancelled by shopkeeper'
+    setCancelingOrderModal(order);
+    setCancelReasonInput('Cancelled by shopkeeper');
+  };
+
+  const handleConfirmCancelOrder = () => {
+    if (!cancelingOrderModal) return;
+    onUpdateOrderStatus(
+      cancelingOrderModal.id,
+      'rejected',
+      cancelReasonInput.trim() || 'Cancelled by shopkeeper'
     );
-    if (reason === null) return;
-    onUpdateOrderStatus(order.id, 'rejected', reason.trim() || 'Cancelled by shopkeeper');
-    showToast(`❌ Order #${order.id} has been cancelled.`);
+    showToast(`❌ Order #${cancelingOrderModal.id} has been cancelled.`);
+    setCancelingOrderModal(null);
+    setCancelReasonInput('Cancelled by shopkeeper');
   };
 
   const handleSendWhatsAppToCustomer = (order: Order) => {
@@ -413,91 +448,46 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
         </div>
       )}
 
-      {/* Top Quick Sub-header Action for POS */}
+      {/* POS Quick Controls without top banner */}
       {activeTab === 'manual_sale' && (
         <div className="space-y-6 animate-fadeIn pb-24">
-          {/* Top POS Sub-header with Catalog / Checkout Toggle & Quick Actions */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-            <div>
-              <h3 className="font-black text-lg text-slate-900 flex items-center gap-2">
-                <Store className="w-5 h-5 text-emerald-600" />
-                <span>Counter POS & Billing</span>
-              </h3>
-              <p className="text-xs text-slate-500">Quickly pick items, build bills, and complete walk-in sales</p>
-            </div>
-            
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setIsQRModalOpen(true)}
-                className="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all flex items-center gap-1.5 border border-slate-200/80"
-              >
-                <QrCode className="w-4 h-4 text-emerald-600" />
-                <span>Store QR</span>
-              </button>
+          {/* Catalog View (Full Width) */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h4 className="font-black text-base text-slate-900 flex items-center gap-2">
+                  <Store className="w-5 h-5 text-emerald-600" />
+                  <span>Select Produce for Counter Sale</span>
+                </h4>
+                <p className="text-xs text-slate-500">Filter by category or search items to add to bill</p>
+              </div>
 
-              {onAddOrder && (
-                <button
-                  type="button"
-                  onClick={() => setIsSimulateCustomerModalOpen(true)}
-                  className="px-3 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold text-xs transition-all flex items-center gap-1.5 border border-emerald-200"
-                >
-                  <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>Simulate Order</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setPosView('catalog')}
-                className={`px-3.5 py-2 rounded-2xl font-black text-xs transition-all flex items-center gap-1.5 ${
-                  posView === 'catalog'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <Package className="w-4 h-4" />
-                <span>Catalog</span>
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => setPosView('checkout')}
-                className={`px-3.5 py-2 rounded-2xl font-black text-xs transition-all flex items-center gap-1.5 relative ${
-                  posView === 'checkout'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                <ShoppingBag className="w-4 h-4" />
-                <span>Checkout</span>
-                {posCart.length > 0 && (
-                  <span className="bg-rose-500 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
-                    {posCart.length}
-                  </span>
+              <div className="flex items-center gap-2">
+                {onAddOrder && (
+                  <button
+                    type="button"
+                    onClick={() => setIsSimulateCustomerModalOpen(true)}
+                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all flex items-center gap-1.5 border border-slate-200"
+                  >
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <span>Simulate Order</span>
+                  </button>
                 )}
-              </button>
-            </div>
-          </div>
 
-          {posView === 'catalog' ? (
-            /* Catalog View (Full Width) */
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-black text-sm text-slate-900">Select Produce for Counter Sale</h4>
-                  <p className="text-xs text-slate-500">Filter by category or search items to add to bill</p>
-                </div>
                 <button
                   type="button"
-                  onClick={() => setPosView('checkout')}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                  onClick={() => {
+                    setActiveTab('orders');
+                    setBillSubTab('checkout');
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95"
                 >
                   <ShoppingBag className="w-4 h-4" />
-                  <span>View Bill ({posCart.length})</span>
+                  <span>View Bill & Checkout ({posCart.length})</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
+            </div>
 
               {/* Search and Category Filter */}
               <div className="space-y-3">
@@ -631,20 +621,29 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                     </div>
                     <div>
                       <p className="font-black text-xs">Current Bill Items Ready</p>
-                      <p className="text-[11px] text-slate-400">Total: <span className="text-emerald-400 font-bold">{formatCurrency(
-                        posCart.reduce((sum, c) => {
-                          const p = c.item.unitType === 'kg'
-                            ? (c.item.pricePerUnit * c.qtyOrWeight) / 1000
-                            : c.item.pricePerUnit * c.qtyOrWeight;
-                          return sum + p;
-                        }, 0)
-                      )}</span></p>
+                      <p className="text-[11px] text-slate-400">
+                        Total:{' '}
+                        <span className="text-emerald-400 font-bold">
+                          {formatCurrency(
+                            posCart.reduce((sum, c) => {
+                              const p =
+                                c.item.unitType === 'kg'
+                                  ? (c.item.pricePerUnit * c.qtyOrWeight) / 1000
+                                  : c.item.pricePerUnit * c.qtyOrWeight;
+                              return sum + p;
+                            }, 0)
+                          )}
+                        </span>
+                      </p>
                     </div>
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => setPosView('checkout')}
+                    onClick={() => {
+                      setActiveTab('orders');
+                      setBillSubTab('checkout');
+                    }}
                     className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
                   >
                     <span>Proceed to Checkout Page</span>
@@ -653,229 +652,75 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                 </div>
               )}
             </div>
-          ) : (
-            /* Checkout & Bill Page (Full Width & Dedicated) */
-            <div className="max-w-3xl mx-auto bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-md space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setPosView('catalog')}
-                  className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Back to Produce Catalog</span>
-                </button>
-                <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
-                  Checkout & Billing Page
-                </span>
-              </div>
-
-              <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
-                    <ShoppingBag className="w-5 h-5 text-emerald-600" />
-                    <span>Itemized Counter Bill</span>
-                  </h3>
-                  <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-xl">
-                    {posCart.length} Items Selected
-                  </span>
-                </div>
-
-                {/* Customer Info */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1.5">Customer Name</label>
-                    <input
-                      type="text"
-                      value={posCustomerName}
-                      onChange={(e) => setPosCustomerName(e.target.value)}
-                      placeholder="Walk-in Customer"
-                      className="w-full px-3.5 py-2.5 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1.5">Mobile Number</label>
-                    <input
-                      type="text"
-                      value={posCustomerPhone}
-                      onChange={(e) => setPosCustomerPhone(e.target.value)}
-                      placeholder="9999999999"
-                      className="w-full px-3.5 py-2.5 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Cart Items List */}
-                <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-                  {posCart.length === 0 ? (
-                    <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 space-y-3">
-                      <ShoppingBag className="w-10 h-10 text-slate-300 mx-auto" />
-                      <p className="text-xs font-bold text-slate-600">Your POS bill is currently empty.</p>
-                      <button
-                        type="button"
-                        onClick={() => setPosView('catalog')}
-                        className="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-emerald-700 transition-colors"
-                      >
-                        Add Produce from Catalog
-                      </button>
-                    </div>
-                  ) : (
-                    posCart.map((c) => {
-                      const isKg = c.item.unitType === 'kg';
-                      const price = isKg
-                        ? (c.item.pricePerUnit * c.qtyOrWeight) / 1000
-                        : c.item.pricePerUnit * c.qtyOrWeight;
-                      return (
-                        <div key={c.item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={c.item.image}
-                                alt={c.item.name}
-                                className="w-10 h-10 rounded-xl object-cover border border-slate-200"
-                                referrerPolicy="no-referrer"
-                              />
-                              <div>
-                                <p className="font-black text-xs text-slate-900">{c.item.name}</p>
-                                <p className="text-[11px] font-bold text-emerald-700">{formatCurrency(price)}</p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setPosCart((prev) => prev.filter((item) => item.item.id !== c.item.id))}
-                              className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          {/* Quantity / Weight input & Quick Presets */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-200">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step={isKg ? "50" : "0.5"}
-                                min={isKg ? "10" : "0.5"}
-                                value={c.qtyOrWeight}
-                                onChange={(e) => {
-                                  const val = Math.max(0, Number(e.target.value));
-                                  setPosCart((prev) =>
-                                    prev.map((item) =>
-                                      item.item.id === c.item.id ? { ...item, qtyOrWeight: val } : item
-                                    )
-                                  );
-                                }}
-                                className="w-28 px-3 py-2 bg-white text-xs border border-slate-300 rounded-xl font-bold text-center text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
-                              />
-                              <span className="text-xs font-bold text-slate-600">
-                                {isKg ? 'grams' : c.item.unitType}
-                              </span>
-                            </div>
-
-                            {/* Quick Presets for Kg */}
-                            {isKg && (
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {[
-                                  { label: '250g', val: 250 },
-                                  { label: '500g', val: 500 },
-                                  { label: '1kg', val: 1000 },
-                                  { label: '1.5kg', val: 1500 },
-                                  { label: '2kg', val: 2000 }
-                                ].map((preset) => (
-                                  <button
-                                    key={preset.label}
-                                    type="button"
-                                    onClick={() => {
-                                      setPosCart((prev) =>
-                                        prev.map((item) =>
-                                          item.item.id === c.item.id ? { ...item, qtyOrWeight: preset.val } : item
-                                        )
-                                      );
-                                    }}
-                                    className={`px-2 py-1 text-[11px] font-black rounded-lg border transition-all ${
-                                      c.qtyOrWeight === preset.val
-                                        ? 'bg-emerald-600 text-white border-emerald-600'
-                                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    {preset.label}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Total and Checkout Options */}
-                {posCart.length > 0 && (
-                  <div className="space-y-5 pt-4 border-t border-slate-200">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-700 block">Select Payment Mode</label>
-                      <div className="grid grid-cols-3 gap-3">
-                        {(['Cash', 'UPI', 'Card'] as const).map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => setPosPaymentMethod(mode)}
-                            className={`py-3 text-xs font-black rounded-2xl border transition-all shadow-xs ${
-                              posPaymentMethod === mode
-                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-105'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            {mode}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-lg font-black text-slate-900 bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
-                      <span>Grand Total:</span>
-                      <span className="text-emerald-700 font-mono text-xl">
-                        {formatCurrency(
-                          posCart.reduce((sum, c) => {
-                            const p = c.item.unitType === 'kg'
-                              ? (c.item.pricePerUnit * c.qtyOrWeight) / 1000
-                              : c.item.pricePerUnit * c.qtyOrWeight;
-                            return sum + p;
-                          }, 0)
-                        )}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleCompletePosSale();
-                        setPosView('catalog');
-                      }}
-                      className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 active:scale-95"
-                    >
-                      <Check className="w-5 h-5" />
-                      <span>Complete Counter Sale & Print Bill</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
-
-      {/* Tab Content: Live Orders */}
+      {/* Tab Content: Bill (Contains Live Queue & Counter Bill Checkout) */}
       {activeTab === 'orders' && (
-        <div className="space-y-4 animate-fadeIn">
-          {/* Multi-Customer Control Bar */}
-          <div className="bg-slate-900 text-white rounded-2xl p-4 space-y-3.5 shadow-md border border-slate-800">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="font-extrabold text-sm text-white">Live Customer Counter Queue</h3>
+        <div className="space-y-4 animate-fadeIn pb-24">
+          {/* Bill Tab Header & Sub-Navigation */}
+          <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-md border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-white">Store Bill & Order Management</h3>
+                <p className="text-[11px] text-slate-400">
+                  Switch between live customer order queue and walk-in counter bill checkout
+                </p>
+              </div>
+            </div>
+
+            {/* Sub-tab Switcher: Live Queue vs Bill Checkout */}
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 self-start sm:self-center">
+              <button
+                type="button"
+                onClick={() => setBillSubTab('queue')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
+                  billSubTab === 'queue'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Live Queue</span>
+                {pendingOrders.length > 0 && (
+                  <span className="px-1.5 py-0.2 bg-emerald-800 text-emerald-100 text-[10px] rounded-full font-black">
+                    {pendingOrders.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBillSubTab('checkout')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
+                  billSubTab === 'checkout'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Bill & Checkout</span>
+                {posCart.length > 0 && (
+                  <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[10px] rounded-full font-black">
+                    {posCart.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-Tab 1: Live Customer Queue */}
+          {billSubTab === 'queue' && (
+            <div className="space-y-4">
+              {/* Multi-Customer Control Bar */}
+              <div className="bg-slate-900 text-white rounded-2xl p-4 space-y-3.5 shadow-md border border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-amber-400" />
+                    <div>
+                      <h3 className="font-extrabold text-sm text-white">Live Customer Counter Queue</h3>
                   <p className="text-[11px] text-slate-400">
                     Verify scale checkout weights and finalize bills
                   </p>
@@ -1048,17 +893,42 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                                 </button>
                               </div>
                             ) : (
-                              <div className="text-right">
-                                <p className="font-black text-xs text-slate-900">
-                                  {formatWeightOrUnits(item.quantityOrWeight, item.unitType)}
-                                </p>
-                                <p className="text-xs font-bold text-emerald-700 font-mono">
-                                  {formatCurrency(item.totalPrice)}
-                                </p>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <p className="font-black text-xs text-slate-900">
+                                    {formatWeightOrUnits(item.quantityOrWeight, item.unitType)}
+                                  </p>
+                                  <p className="text-xs font-bold text-emerald-700 font-mono">
+                                    {formatCurrency(item.totalPrice)}
+                                  </p>
+                                </div>
+                                {order.status !== 'rejected' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveItemFromOrderDirect(order, idx)}
+                                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-200"
+                                    title={`Cancel item ${item.name}`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
                         ))}
+
+                        {/* Cancelled/Rejected Banner */}
+                        {order.status === 'rejected' && (
+                          <div className="mt-3 bg-rose-50 border border-rose-200 p-3 rounded-2xl flex items-start gap-2.5 text-xs text-rose-950">
+                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-extrabold text-rose-900 block">Cancellation / Decline Reason:</span>
+                              <p className="font-semibold text-slate-800 mt-0.5">
+                                {order.rejectionReason || 'Order was cancelled or declined by shopkeeper.'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
 
                         {/* In Live Order Edit Mode: Add Item & Extra Notes */}
                         {isEditingThis && (
@@ -1253,6 +1123,219 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Sub-Tab 2: Counter Bill & Checkout */}
+      {billSubTab === 'checkout' && (
+        <div className="max-w-3xl mx-auto bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-md space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab('manual_sale')}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Produce Catalog</span>
+            </button>
+            <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+              Counter Bill & Checkout
+            </span>
+          </div>
+
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                <span>Itemized Counter Bill</span>
+              </h3>
+              <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-xl">
+                {posCart.length} Items Selected
+              </span>
+            </div>
+
+            {/* Customer Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">Customer Name</label>
+                <input
+                  type="text"
+                  value={posCustomerName}
+                  onChange={(e) => setPosCustomerName(e.target.value)}
+                  placeholder="Walk-in Customer"
+                  className="w-full px-3.5 py-2.5 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">Mobile Number</label>
+                <input
+                  type="text"
+                  value={posCustomerPhone}
+                  onChange={(e) => setPosCustomerPhone(e.target.value)}
+                  placeholder="9999999999"
+                  className="w-full px-3.5 py-2.5 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Cart Items List */}
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+              {posCart.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 space-y-3">
+                  <ShoppingBag className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-xs font-bold text-slate-600">Your POS bill is currently empty.</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('manual_sale')}
+                    className="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-emerald-700 transition-colors"
+                  >
+                    Add Produce from Catalog
+                  </button>
+                </div>
+              ) : (
+                posCart.map((c) => {
+                  const isKg = c.item.unitType === 'kg';
+                  const price = isKg
+                    ? (c.item.pricePerUnit * c.qtyOrWeight) / 1000
+                    : c.item.pricePerUnit * c.qtyOrWeight;
+                  return (
+                    <div key={c.item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={c.item.image}
+                            alt={c.item.name}
+                            className="w-10 h-10 rounded-xl object-cover border border-slate-200"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div>
+                            <p className="font-black text-xs text-slate-900">{c.item.name}</p>
+                            <p className="text-[11px] font-bold text-emerald-700">{formatCurrency(price)}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPosCart((prev) => prev.filter((item) => item.item.id !== c.item.id))}
+                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Quantity / Weight input & Quick Presets */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step={isKg ? "50" : "0.5"}
+                            min={isKg ? "10" : "0.5"}
+                            value={c.qtyOrWeight}
+                            onChange={(e) => {
+                              const val = Math.max(0, Number(e.target.value));
+                              setPosCart((prev) =>
+                                prev.map((item) =>
+                                  item.item.id === c.item.id ? { ...item, qtyOrWeight: val } : item
+                                )
+                              );
+                            }}
+                            className="w-28 px-3 py-2 bg-white text-xs border border-slate-300 rounded-xl font-bold text-center text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <span className="text-xs font-bold text-slate-600">
+                            {isKg ? 'grams' : c.item.unitType}
+                          </span>
+                        </div>
+
+                        {/* Quick Presets for Kg */}
+                        {isKg && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {[
+                              { label: '250g', val: 250 },
+                              { label: '500g', val: 500 },
+                              { label: '1kg', val: 1000 },
+                              { label: '1.5kg', val: 1500 },
+                              { label: '2kg', val: 2000 }
+                            ].map((preset) => (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={() => {
+                                  setPosCart((prev) =>
+                                    prev.map((item) =>
+                                      item.item.id === c.item.id ? { ...item, qtyOrWeight: preset.val } : item
+                                    )
+                                  );
+                                }}
+                                className={`px-2 py-1 text-[11px] font-black rounded-lg border transition-all ${
+                                  c.qtyOrWeight === preset.val
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Total and Checkout Options */}
+            {posCart.length > 0 && (
+              <div className="space-y-5 pt-4 border-t border-slate-200">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 block">Select Payment Mode</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {(['Cash', 'UPI', 'Card'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPosPaymentMethod(mode)}
+                        className={`py-3 text-xs font-black rounded-2xl border transition-all shadow-xs ${
+                          posPaymentMethod === mode
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-105'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-lg font-black text-slate-900 bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
+                  <span>Grand Total:</span>
+                  <span className="text-emerald-700 font-mono text-xl">
+                    {formatCurrency(
+                      posCart.reduce((sum, c) => {
+                        const p = c.item.unitType === 'kg'
+                          ? (c.item.pricePerUnit * c.qtyOrWeight) / 1000
+                          : c.item.pricePerUnit * c.qtyOrWeight;
+                        return sum + p;
+                      }, 0)
+                    )}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCompletePosSale();
+                    setBillSubTab('queue');
+                  }}
+                  className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Check className="w-5 h-5" />
+                  <span>Complete Counter Sale & Print Bill</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
         </div>
       )}
 
@@ -1624,6 +1707,17 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
         />
       )}
 
+      {/* Floating Store QR Action Button */}
+      <button
+        type="button"
+        onClick={() => setIsQRModalOpen(true)}
+        className="fixed bottom-20 right-5 z-40 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 font-extrabold text-xs transition-all hover:scale-105 active:scale-95 border-2 border-emerald-400 group"
+        title="Generate & View Store QR Code"
+      >
+        <QrCode className="w-5 h-5 text-amber-300 group-hover:rotate-12 transition-transform" />
+        <span className="hidden sm:inline font-bold">Store QR</span>
+      </button>
+
       {/* Fixed Bottom Navigation Bar (Matching Customer Page Style) */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2 flex items-center justify-around shadow-xl">
         <button
@@ -1648,8 +1742,8 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
               : 'text-slate-600 hover:text-emerald-700 font-semibold'
           }`}
         >
-          <Clock className="w-5 h-5" />
-          <span className="text-[10px]">Live Queue</span>
+          <FileText className="w-5 h-5" />
+          <span className="text-[10px]">Bill</span>
           {pendingOrders.length > 0 && (
             <span className="absolute top-0 right-2 bg-emerald-600 text-white font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
               {pendingOrders.length}
@@ -1682,6 +1776,60 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
           <Store className="w-5 h-5" />
           <span className="text-[10px]">Store Hub</span>
         </button>
+      {/* Cancel Order Confirmation Modal */}
+      {cancelingOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-rose-600">
+                <XCircle className="w-5 h-5" />
+                <h3 className="font-black text-base text-slate-900">Cancel Order #{cancelingOrderModal.id.slice(-6)}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelingOrderModal(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <p>Customer: <strong className="text-slate-900">{cancelingOrderModal.customerName}</strong> ({cancelingOrderModal.customerPhone})</p>
+              <p>Total Bill: <strong className="text-emerald-700 font-mono">{formatCurrency(cancelingOrderModal.grandTotal)}</strong> ({cancelingOrderModal.items.length} items)</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-slate-800 block">Reason for Cancellation:</label>
+              <input
+                type="text"
+                value={cancelReasonInput}
+                onChange={(e) => setCancelReasonInput(e.target.value)}
+                placeholder="e.g. Out of stock / Customer requested cancellation"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 outline-none focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancelingOrderModal(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelOrder}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Confirm Cancel Order</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

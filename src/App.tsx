@@ -79,11 +79,14 @@ export default function App() {
   const handleAddToCart = (newItem: CartItem) => {
     if (soundEnabled) playChimeSound('click');
     setCart((prev) => {
+      const isKg = newItem.item.unitType === 'kg';
+      const maxStockGramsOrUnits = isKg ? (newItem.item.stockQuantity * 1000) : newItem.item.stockQuantity;
       const existingIdx = prev.findIndex((c) => c.itemId === newItem.itemId);
+
       if (existingIdx > -1) {
         const copy = [...prev];
         const existing = copy[existingIdx];
-        const updatedGrams = existing.quantityOrWeight + newItem.quantityOrWeight;
+        const updatedGrams = Math.min(maxStockGramsOrUnits, existing.quantityOrWeight + newItem.quantityOrWeight);
         const updatedPrice = existing.item.unitType === 'kg'
           ? (existing.item.pricePerUnit * updatedGrams) / 1000
           : existing.item.pricePerUnit * updatedGrams;
@@ -95,7 +98,13 @@ export default function App() {
         };
         return copy;
       }
-      return [...prev, newItem];
+
+      const cappedQuantity = Math.min(maxStockGramsOrUnits, newItem.quantityOrWeight);
+      const calculatedPrice = newItem.item.unitType === 'kg'
+        ? (newItem.item.pricePerUnit * cappedQuantity) / 1000
+        : newItem.item.pricePerUnit * cappedQuantity;
+
+      return [...prev, { ...newItem, quantityOrWeight: cappedQuantity, calculatedPrice }];
     });
   };
 
@@ -104,12 +113,17 @@ export default function App() {
     setCart((prev) =>
       prev.map((item) => {
         if (item.itemId === itemId) {
+          const isKg = item.item.unitType === 'kg';
+          const maxStockGramsOrUnits = isKg ? (item.item.stockQuantity * 1000) : item.item.stockQuantity;
+          const cappedQuantity = Math.min(maxStockGramsOrUnits, Math.max(0, newGramsOrCount));
+
           const calculatedPrice = item.item.unitType === 'kg'
-            ? (item.item.pricePerUnit * newGramsOrCount) / 1000
-            : item.item.pricePerUnit * newGramsOrCount;
+            ? (item.item.pricePerUnit * cappedQuantity) / 1000
+            : item.item.pricePerUnit * cappedQuantity;
+
           return {
             ...item,
-            quantityOrWeight: newGramsOrCount,
+            quantityOrWeight: cappedQuantity,
             calculatedPrice
           };
         }
@@ -135,11 +149,14 @@ export default function App() {
     sendViaWhatsApp: boolean = false,
     fulfillmentType: 'store_pickup' | 'home_delivery' = 'store_pickup',
     deliveryAddress?: string,
-    deliveryFee: number = 0
+    deliveryFee: number = 0,
+    promoCode?: string,
+    discountAmount: number = 0
   ) => {
     const subtotal = cart.reduce((acc, curr) => acc + curr.calculatedPrice, 0);
     const calculatedFee = fulfillmentType === 'home_delivery' ? deliveryFee : 0;
-    const grandTotal = subtotal + calculatedFee;
+    const finalDiscount = Math.min(subtotal, Math.max(0, discountAmount));
+    const grandTotal = Math.max(0, subtotal - finalDiscount + calculatedFee);
 
     const orderItems: OrderItem[] = cart.map((c) => ({
       itemId: c.itemId,
@@ -160,6 +177,8 @@ export default function App() {
       tax: 0,
       platformFee: 0,
       deliveryFee: calculatedFee,
+      promoCode,
+      discountAmount: finalDiscount,
       grandTotal,
       status: 'sent_to_shopkeeper',
       fulfillmentType,
@@ -290,8 +309,9 @@ export default function App() {
 
   const pendingOrderCount = orders.filter((o) => o.status === 'sent_to_shopkeeper').length;
   const activeCustomerOrder = orders.find(
-    (o) => o.status === 'sent_to_shopkeeper' || o.status === 'approved'
-  ) || null;
+    (o) => (o.status === 'sent_to_shopkeeper' || o.status === 'approved') &&
+           (customerSession.phone ? o.customerPhone === customerSession.phone : true)
+  ) || (customerSession.phone ? orders.find((o) => o.customerPhone === customerSession.phone) : null) || null;
 
   if (currentView === 'auth') {
     return (
@@ -341,6 +361,8 @@ export default function App() {
             session={customerSession}
             onOpenQRScanner={() => setIsQRScannerModalOpen(true)}
             onOpenLogin={() => setIsLoginModalOpen(true)}
+            activeOrder={activeCustomerOrder}
+            onViewReceipt={(order) => setActiveReceiptOrder(order)}
           />
         ) : (
           <ShopkeeperDashboard

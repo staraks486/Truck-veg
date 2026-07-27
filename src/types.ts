@@ -6,9 +6,21 @@ export type Category =
   | 'Root Vegetables'
   | 'Leafy Greens'
   | 'Exotic Fruits'
-  | 'Organic Herbs';
+  | 'Organic Herbs'
+  | string;
 
-export type UnitType = 'kg' | 'piece' | 'bunch';
+export type UnitType = 
+  | 'kg' 
+  | 'g'
+  | 'piece' 
+  | 'bunch' 
+  | 'pack' 
+  | 'dozen' 
+  | 'box' 
+  | 'liter' 
+  | 'pouch' 
+  | 'tray'
+  | string;
 
 export interface InventoryItem {
   id: string;
@@ -56,6 +68,8 @@ export interface Order {
   status: OrderStatus;
   fulfillmentType?: 'store_pickup' | 'home_delivery';
   deliveryAddress?: string;
+  promoCode?: string;
+  discountAmount?: number;
   rejectionReason?: string;
   shopkeeperNote?: string;
   createdAt: string;

@@ -21,14 +21,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
   // Check if this item is already in cart
   const existingCartItem = cart.find((c) => c.itemId === item.id);
 
+  // Calculate total stock and remaining stock considering existing cart items
+  const maxStockGramsOrUnits = isKg ? Math.round(item.stockQuantity * 1000) : item.stockQuantity;
+  const inCartGramsOrUnits = existingCartItem ? existingCartItem.quantityOrWeight : 0;
+  const remainingStockGramsOrUnits = Math.max(0, maxStockGramsOrUnits - inCartGramsOrUnits);
+
   const parsedNum = parseFloat(inputValue) || 0;
 
-  // Compute quantity in grams for kg items, or count for unit items
-  const quantityOrWeight = isKg
+  // Compute requested quantity in grams for kg items, or count for unit items
+  const rawQuantityOrWeight = isKg
     ? weightUnit === 'g'
       ? Math.round(parsedNum)
       : Math.round(parsedNum * 1000)
     : parsedNum;
+
+  // Clamp requested quantity to remaining available shopkeeper stock
+  const quantityOrWeight = Math.min(rawQuantityOrWeight, remainingStockGramsOrUnits);
+  const isStockCapped = rawQuantityOrWeight > remainingStockGramsOrUnits && remainingStockGramsOrUnits > 0;
 
   const computedPrice = isKg
     ? (item.pricePerUnit * quantityOrWeight) / 1000
@@ -36,7 +45,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (quantityOrWeight <= 0) return;
+    if (quantityOrWeight <= 0 || remainingStockGramsOrUnits <= 0) return;
     onAddToCart({
       itemId: item.id,
       item,
@@ -97,13 +106,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
           )}
         </div>
 
-        {/* Product Title & Rate */}
+        {/* Product Title, Rate & Stock Info */}
         <div className="space-y-0.5 px-0.5">
           <h3 className="font-black text-slate-900 text-xs line-clamp-1 group-hover:text-emerald-700 transition-colors">
             {item.name}
           </h3>
-          <div className="text-[11px] font-black text-slate-800">
-            {formatCurrency(item.pricePerUnit)} <span className="text-[10px] text-slate-400 font-normal">/ {item.unitType}</span>
+          <div className="flex items-center justify-between text-[11px] font-black text-slate-800">
+            <span>
+              {formatCurrency(item.pricePerUnit)} <span className="text-[10px] text-slate-400 font-normal">/ {item.unitType}</span>
+            </span>
+            <span className={`text-[10px] font-bold ${
+              remainingStockGramsOrUnits <= 0 ? 'text-rose-600 font-black' : 'text-slate-500'
+            }`}>
+              {remainingStockGramsOrUnits <= 0
+                ? 'Out of Stock'
+                : `Stock: ${item.stockQuantity} ${item.unitType}`}
+            </span>
           </div>
         </div>
       </div>
@@ -112,7 +130,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
       <div className="mt-2 pt-2 border-t border-slate-100 space-y-1.5">
         <div className="flex items-center gap-1.5">
           {/* Quantity Input Box */}
-          <div className="relative flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition-all">
+          <div className={`relative flex-1 flex items-center bg-slate-50 border rounded-lg overflow-hidden transition-all ${
+            isStockCapped ? 'border-amber-400 bg-amber-50/50' : 'border-slate-200 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500'
+          }`}>
             <input
               type="number"
               step={isKg && weightUnit === 'kg' ? "0.1" : "1"}
@@ -139,11 +159,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
 
           {/* Add Button */}
           <button
+            type="button"
             onClick={handleAdd}
-            disabled={!item.inStock || item.stockQuantity <= 0 || quantityOrWeight <= 0}
+            disabled={!item.inStock || remainingStockGramsOrUnits <= 0 || quantityOrWeight <= 0}
             className={`py-1 px-2.5 rounded-lg font-black text-xs flex items-center justify-center gap-1 transition-all shrink-0 ${
-              !item.inStock || item.stockQuantity <= 0 || quantityOrWeight <= 0
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              !item.inStock || remainingStockGramsOrUnits <= 0 || quantityOrWeight <= 0
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                 : isAdded
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95 shadow-xs shadow-emerald-600/20'
@@ -154,7 +175,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
                 <Check className="w-3.5 h-3.5" />
                 <span>Added</span>
               </>
-            ) : !item.inStock || item.stockQuantity <= 0 ? (
+            ) : !item.inStock || remainingStockGramsOrUnits <= 0 ? (
               <span>Sold Out</span>
             ) : (
               <>
@@ -165,10 +186,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
           </button>
         </div>
 
-        {/* Total Price for Selected Quantity */}
+        {/* Total Price for Selected Quantity & Stock Limit Note */}
         <div className="flex items-center justify-between text-[10px] px-0.5 text-slate-500 font-medium">
           <span>{displayQuantityText}</span>
-          <span className="font-black text-emerald-700">{formatCurrency(computedPrice)}</span>
+          {isStockCapped ? (
+            <span className="font-extrabold text-amber-700">Max stock limit</span>
+          ) : (
+            <span className="font-black text-emerald-700">{formatCurrency(computedPrice)}</span>
+          )}
         </div>
       </div>
     </div>

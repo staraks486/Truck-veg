@@ -290,10 +290,16 @@ export function formatWeightOrUnits(quantityOrWeight: number, unitType: string):
       return `${kgVal % 1 === 0 ? kgVal : kgVal.toFixed(2)} kg`;
     }
     return `${quantityOrWeight} g`;
+  } else if (unitType === 'g') {
+    return `${quantityOrWeight} g`;
   } else if (unitType === 'bunch') {
     return `${quantityOrWeight} bunch${quantityOrWeight > 1 ? 'es' : ''}`;
+  } else if (unitType === 'piece' || unitType === 'pcs') {
+    return `${quantityOrWeight} pc${quantityOrWeight > 1 ? 's' : ''}`;
+  } else if (unitType === 'dozen') {
+    return `${quantityOrWeight} doz`;
   } else {
-    return `${quantityOrWeight} piece${quantityOrWeight > 1 ? 's' : ''}`;
+    return `${quantityOrWeight} ${unitType}`;
   }
 }
 

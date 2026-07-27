@@ -91,16 +91,35 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             {order.status === 'rejected' && <AlertTriangle className="w-5 h-5 text-rose-300" />}
 
             <div>
-              <h3 className="font-extrabold text-sm capitalize">
-                {order.status === 'paid'
-                  ? 'Payment Completed & Verified'
-                  : order.status === 'approved'
-                  ? 'Bill Finalized by Shopkeeper'
-                  : order.status === 'rejected'
-                  ? 'Order Declined'
-                  : 'Awaiting Shopkeeper Verification'}
-              </h3>
-              <p className="text-[11px] text-white/80 font-mono">
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-sm capitalize">
+                  {order.status === 'paid'
+                    ? 'Payment Completed & Verified'
+                    : order.status === 'approved'
+                    ? 'Order Accepted by Shopkeeper'
+                    : order.status === 'rejected'
+                    ? 'Order Declined'
+                    : 'Waiting for Shopkeeper Verification'}
+                </h3>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                  order.status === 'approved'
+                    ? 'bg-emerald-300 text-emerald-950'
+                    : order.status === 'sent_to_shopkeeper'
+                    ? 'bg-amber-300 text-amber-950'
+                    : order.status === 'paid'
+                    ? 'bg-emerald-300 text-emerald-950'
+                    : 'bg-rose-300 text-rose-950'
+                }`}>
+                  {order.status === 'approved'
+                    ? 'ACCEPTED'
+                    : order.status === 'sent_to_shopkeeper'
+                    ? 'WAITING'
+                    : order.status === 'paid'
+                    ? 'COMPLETED'
+                    : 'DECLINED'}
+                </span>
+              </div>
+              <p className="text-[11px] text-white/80 font-mono mt-0.5">
                 Order ID: #{order.id}
               </p>
             </div>
@@ -237,19 +256,23 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           {order.status === 'sent_to_shopkeeper' && (
             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-center space-y-2 animate-pulse">
               <Clock className="w-8 h-8 text-amber-600 mx-auto" />
-              <h4 className="font-bold text-amber-900 text-sm">Waiting for Shopkeeper Verification</h4>
-              <p className="text-xs text-amber-700 max-w-xs mx-auto">
-                The shopkeeper is weighing your items on the counter scale. Once approved, your payment QR code will automatically appear here!
+              <div className="inline-block px-3 py-1 bg-amber-200 text-amber-950 font-black text-xs rounded-full uppercase tracking-wider">
+                Status: WAITING FOR SHOPKEEPER
+              </div>
+              <p className="text-xs text-amber-800 max-w-sm mx-auto font-medium leading-relaxed">
+                <strong>Status Update Message:</strong> Your self-checkout cart order has been sent to the shopkeeper's scale. Please wait a moment while the shopkeeper accepts your produce items & scale weights.
               </p>
             </div>
           )}
 
           {order.status === 'approved' && (
-            <div className="p-4 bg-teal-50 rounded-2xl border border-teal-200 text-center space-y-3 animate-fadeIn">
-              <div className="flex items-center justify-center gap-1.5 text-teal-900 font-bold text-xs">
-                <Sparkles className="w-4 h-4 text-teal-600" />
-                <span>Shopkeeper Approved • Scan & Pay via UPI</span>
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-center space-y-3 animate-fadeIn">
+              <div className="inline-block px-3 py-1 bg-emerald-200 text-emerald-950 font-black text-xs rounded-full uppercase tracking-wider">
+                Status: ACCEPTED BY SHOPKEEPER
               </div>
+              <p className="text-xs text-emerald-900 max-w-sm mx-auto font-semibold leading-relaxed bg-white/80 p-2.5 rounded-xl border border-emerald-200">
+                ✅ <strong>Status Update Message:</strong> Order Accepted! The shopkeeper has verified your produce weights and finalized your bill. You can now complete payment below via UPI, Cash, or Card.
+              </p>
 
               {qrCodeDataUrl ? (
                 <div className="p-3 bg-white inline-block rounded-xl border border-teal-300 shadow-md">
@@ -292,6 +315,26 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </p>
               <div className="p-2 bg-white rounded-lg border border-emerald-200 text-[11px] text-emerald-700 font-medium inline-block">
                 Thank you for shopping at {order.storeName}!
+              </div>
+            </div>
+          )}
+
+          {order.status === 'rejected' && (
+            <div className="p-4 bg-rose-50 rounded-2xl border border-rose-300 text-center space-y-2.5 animate-fadeIn">
+              <div className="w-10 h-10 bg-rose-600 text-white rounded-full flex items-center justify-center mx-auto shadow-md">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="inline-block px-3 py-1 bg-rose-200 text-rose-950 font-black text-xs rounded-full uppercase tracking-wider">
+                Status: DECLINED BY SHOPKEEPER
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-rose-200 text-xs text-rose-950 space-y-1 text-left max-w-sm mx-auto shadow-2xs">
+                <span className="font-extrabold block text-rose-900 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>Reason for Cancellation / Decline:</span>
+                </span>
+                <p className="text-slate-800 leading-relaxed font-semibold text-[11px]">
+                  {order.rejectionReason || 'The shopkeeper declined this order. Please check with counter staff or update your items.'}
+                </p>
               </div>
             </div>
           )}
