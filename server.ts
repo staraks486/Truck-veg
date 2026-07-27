@@ -14,33 +14,42 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // AI Recipe & Meal Planner Endpoint using Gemini API
+  // AI Recipe & Meal Planner Endpoint using Gemini API (100% Pure Vegetarian)
   app.post("/api/generate-recipe", async (req, res) => {
     try {
-      const { items } = req.body;
+      const { items, mealType, spiceLevel, customPantry, language } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
+
+      const itemNamesList = [
+        ...(items?.map((i: any) => i.name) || []),
+        ...(customPantry || [])
+      ];
+      const itemNames = itemNamesList.length > 0 ? itemNamesList.join(", ") : "fresh seasonal vegetables";
+      const selectedLang = language || "English";
+      const stylePref = `${mealType || "Quick Dish"} (${spiceLevel || "Medium"} Spice) in ${selectedLang} language`;
 
       if (!apiKey) {
         // Fallback if API key is not configured
         return res.json({
-          recipeName: "Farm Fresh Healthy Salad & Stir Fry",
-          prepTime: "15 mins",
-          calories: "280 kcal",
-          ingredients: items?.map((i: any) => i.name) || ["Fresh Vegetables"],
+          recipeName: `Farm Fresh Pure Veg ${mealType || 'Curry'} (${selectedLang})`,
+          prepTime: "12 mins",
+          calories: "220 kcal",
+          ingredients: itemNamesList.length > 0 ? itemNamesList : ["Fresh Tomatoes", "Spinach", "Paneer"],
           instructions: [
-            "Wash all fresh farm produce thoroughly in clean running water.",
-            "Chop ingredients into bite-sized pieces.",
-            "Toss with olive oil, lemon juice, sea salt, and freshly cracked black pepper.",
-            "Serve chilled or lightly sautéed for maximum natural flavor and nutrition."
+            "Wash and chop all fresh produce into bite-sized uniform pieces.",
+            `Tadka: Heat 1 tbsp ghee or cold-pressed oil, add cumin, turmeric, and ${spiceLevel || 'medium'} spice powders.`,
+            `Add chopped ${itemNames.slice(0, 30)} and simmer gently on medium flame for 8-10 minutes.`,
+            "Garnish with fresh cilantro and lemon juice. Serve hot with chapatis or steamed rice."
           ],
-          chefTip: "Keeping vegetables crisp preserves 90% of active vitamins and antioxidants."
+          chefTip: "Steaming or light sautéing with cold-pressed oil retains 95% of active vitamins and authentic regional flavor."
         });
       }
 
       const ai = new GoogleGenAI({ apiKey });
-      const itemNames = items?.map((i: any) => i.name).join(", ") || "fresh vegetables";
 
-      const prompt = `You are an expert master chef and nutritionist. Based on these fresh ingredients: ${itemNames}, create a delightful, healthy, and easy-to-cook recipe.
+      const prompt = `You are an expert Indian 100% PURE VEGETARIAN master chef and nutritionist. Based on these available ingredients: ${itemNames}, generate a delicious, authentic 100% PURE VEGETARIAN Indian recipe suitable for ${stylePref}.
+STRICT REQUIREMENT 1: MUST BE 100% PURE VEGETARIAN (no meat, no eggs, no poultry, no seafood).
+STRICT REQUIREMENT 2: Output ALL fields (recipeName, ingredients, instructions, chefTip) in the requested language: ${selectedLang}.
 Return ONLY valid JSON with no markdown formatting or extra text, in this exact structure:
 {
   "recipeName": "string",
@@ -65,11 +74,11 @@ Return ONLY valid JSON with no markdown formatting or extra text, in this exact 
     } catch (error: any) {
       console.error("Gemini Recipe Generation Error:", error);
       res.status(500).json({
-        recipeName: "Quick Farm Fresh Medley",
+        recipeName: "Quick Farm Fresh Pure Veg Medley",
         prepTime: "10 mins",
-        calories: "220 kcal",
-        ingredients: ["Fresh Produce"],
-        instructions: ["Chop and lightly sauté with olive oil and herbs."],
+        calories: "210 kcal",
+        ingredients: ["Fresh Organic Produce"],
+        instructions: ["Chop and lightly sauté with olive oil, cumin, and fresh herbs."],
         chefTip: "Enjoy fresh for maximum vitality."
       });
     }
