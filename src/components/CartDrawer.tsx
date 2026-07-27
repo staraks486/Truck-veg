@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CartItem, CustomerSession, Order } from '../types';
-import { X, Trash2, ShoppingBag, Send, Scale, ArrowRight, User, Phone, CheckCircle2, Clock, MessageSquare } from 'lucide-react';
+import { X, Trash2, ShoppingBag, Send, Scale, ArrowRight, User, Phone, CheckCircle2, Clock, MessageSquare, Truck, MapPin, Store } from 'lucide-react';
 import { formatCurrency, formatWeightOrUnits } from '../utils/storageManager';
 
 interface CartDrawerProps {
@@ -12,7 +12,14 @@ interface CartDrawerProps {
   onClearCart: () => void;
   customerSession: CustomerSession;
   onOpenLogin: () => void;
-  onSubmitOrder: (customerName: string, customerPhone: string, sendViaWhatsApp?: boolean) => void;
+  onSubmitOrder: (
+    customerName: string,
+    customerPhone: string,
+    sendViaWhatsApp?: boolean,
+    fulfillmentType?: 'store_pickup' | 'home_delivery',
+    deliveryAddress?: string,
+    deliveryFee?: number
+  ) => void;
   activeOrder: Order | null;
   onViewReceipt: (order: Order) => void;
 }
@@ -31,13 +38,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onViewReceipt
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fulfillmentType, setFulfillmentType] = useState<'store_pickup' | 'home_delivery'>('store_pickup');
+  const [deliveryAddress, setDeliveryAddress] = useState(customerSession.deliveryAddress || '');
+
+  useEffect(() => {
+    if (customerSession.deliveryAddress && !deliveryAddress) {
+      setDeliveryAddress(customerSession.deliveryAddress);
+    }
+  }, [customerSession.deliveryAddress]);
 
   if (!isOpen) return null;
 
   const subtotal = cart.reduce((acc, curr) => acc + curr.calculatedPrice, 0);
   const tax = 0; // Fresh produce tax-exempt
-  const platformFee = 0; // Free self-checkout
-  const grandTotal = subtotal + tax + platformFee;
+  const deliveryFee = fulfillmentType === 'home_delivery' ? (subtotal >= 300 ? 0 : 30) : 0;
+  const grandTotal = subtotal + tax + deliveryFee;
 
   const handleSendOrder = (sendViaWhatsApp: boolean = false) => {
     if (cart.length === 0) return;
@@ -46,9 +61,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
 
+    if (fulfillmentType === 'home_delivery' && !deliveryAddress.trim()) {
+      alert('Please enter your delivery address for home delivery.');
+      return;
+    }
+
     setIsSubmitting(true);
     setTimeout(() => {
-      onSubmitOrder(customerSession.name, customerSession.phone, sendViaWhatsApp);
+      onSubmitOrder(
+        customerSession.name,
+        customerSession.phone,
+        sendViaWhatsApp,
+        fulfillmentType,
+        deliveryAddress.trim(),
+        deliveryFee
+      );
       setIsSubmitting(false);
     }, 500);
   };
@@ -195,7 +222,74 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           {/* Customer Info & Order Summary Footer */}
           {cart.length > 0 && (
-            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 space-y-4">
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 space-y-3.5">
+              
+              {/* Fulfillment Option Switcher */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                  Select Order Delivery Mode:
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentType('store_pickup')}
+                    className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
+                      fulfillmentType === 'store_pickup'
+                        ? 'bg-emerald-900 text-white border-emerald-900 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-extrabold text-xs">
+                      <Store className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                      <span>Store Pickup</span>
+                    </div>
+                    <span className="text-[10px] opacity-80 leading-tight">Self-checkout in store • ₹0</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentType('home_delivery')}
+                    className={`p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1 ${
+                      fulfillmentType === 'home_delivery'
+                        ? 'bg-emerald-900 text-white border-emerald-900 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-extrabold text-xs">
+                      <Truck className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                      <span>Home Delivery</span>
+                    </div>
+                    <span className="text-[10px] opacity-80 leading-tight">
+                      {subtotal >= 300 ? 'FREE (Over ₹300)' : '₹30 Express Delivery'}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Home Delivery Address Input */}
+                {fulfillmentType === 'home_delivery' && (
+                  <div className="bg-emerald-50/90 border border-emerald-200 p-3 rounded-2xl space-y-1.5 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-extrabold text-emerald-950 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Delivery Address <span className="text-rose-600">*</span></span>
+                      </label>
+                      {subtotal < 300 && (
+                        <span className="text-[10px] font-bold text-emerald-800">
+                          Add {formatCurrency(300 - subtotal)} more for FREE delivery
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      placeholder="Enter flat/house no., street name, landmark & area..."
+                      className="w-full text-xs font-medium bg-white border border-emerald-300 rounded-xl p-2 text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-600 transition-all"
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* Customer Info Card */}
               <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
@@ -230,10 +324,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <span>Fresh Produce GST</span>
                   <span className="font-semibold">Exempt (0%)</span>
                 </div>
-                <div className="flex justify-between text-emerald-700">
-                  <span>Self-Checkout Digital Fee</span>
-                  <span className="font-bold uppercase tracking-wider">Free (₹0)</span>
-                </div>
+                {fulfillmentType === 'home_delivery' ? (
+                  <div className="flex justify-between text-emerald-800 font-medium">
+                    <span>Express Home Delivery Fee</span>
+                    <span className="font-bold">
+                      {deliveryFee === 0 ? <span className="text-emerald-700 uppercase">FREE</span> : formatCurrency(deliveryFee)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Self-Checkout Digital Fee</span>
+                    <span className="font-bold uppercase tracking-wider">Free (₹0)</span>
+                  </div>
+                )}
                 <div className="pt-2 border-t border-slate-200 flex justify-between text-sm font-extrabold text-slate-900">
                   <span>Grand Total</span>
                   <span className="text-base text-emerald-800">{formatCurrency(grandTotal)}</span>

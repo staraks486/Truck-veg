@@ -37,6 +37,7 @@ import {
   Settings,
   Store,
   MapPin,
+  Truck,
   Tag,
   ArrowRight,
   ArrowLeft
@@ -84,6 +85,8 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
   const [shopkeeperNote, setShopkeeperNote] = useState('');
+  const [editedDeliveryAddress, setEditedDeliveryAddress] = useState('');
+  const [addItemSelectId, setAddItemSelectId] = useState('');
   const [rejectingOrderId, setRejectingOrderId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -278,22 +281,74 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     setEditingOrderId(order.id);
     setEditedItems(JSON.parse(JSON.stringify(order.items)));
     setShopkeeperNote(order.shopkeeperNote || '');
+    setEditedDeliveryAddress(order.deliveryAddress || '');
+    setAddItemSelectId('');
   };
 
   const handleWeightChange = (itemIdx: number, newGramsOrQty: number) => {
     const updated = [...editedItems];
     const item = updated[itemIdx];
-    item.quantityOrWeight = newGramsOrQty;
+    item.quantityOrWeight = Math.max(1, newGramsOrQty);
     item.totalPrice = item.unitType === 'kg'
-      ? (item.pricePerUnit * newGramsOrQty) / 1000
-      : item.pricePerUnit * newGramsOrQty;
+      ? (item.pricePerUnit * item.quantityOrWeight) / 1000
+      : item.pricePerUnit * item.quantityOrWeight;
     setEditedItems(updated);
+  };
+
+  const handleRemoveItemFromOrder = (itemIdx: number) => {
+    if (editedItems.length <= 1) {
+      showToast('An order must contain at least 1 item. Cancel the order if all items are removed.');
+      return;
+    }
+    const updated = editedItems.filter((_, idx) => idx !== itemIdx);
+    setEditedItems(updated);
+    showToast('Removed item from live order.');
+  };
+
+  const handleAddItemToOrder = (inventoryItemId: string) => {
+    if (!inventoryItemId) return;
+    const inventoryItem = inventory.find(i => i.id === inventoryItemId);
+    if (!inventoryItem) return;
+
+    const defaultQty = inventoryItem.unitType === 'kg' ? 500 : 1;
+    const calcPrice = inventoryItem.unitType === 'kg'
+      ? (inventoryItem.pricePerUnit * defaultQty) / 1000
+      : inventoryItem.pricePerUnit * defaultQty;
+
+    const newItem: OrderItem = {
+      itemId: inventoryItem.id,
+      name: inventoryItem.name,
+      unitType: inventoryItem.unitType,
+      quantityOrWeight: defaultQty,
+      pricePerUnit: inventoryItem.pricePerUnit,
+      totalPrice: calcPrice
+    };
+
+    setEditedItems([...editedItems, newItem]);
+    setAddItemSelectId('');
+    showToast(`Added ${inventoryItem.name} to live order!`);
   };
 
   const saveEditedOrder = (orderId: string) => {
     onUpdateOrderWeights(orderId, editedItems, shopkeeperNote);
+    if (editedDeliveryAddress !== undefined) {
+      const targetOrder = orders.find(o => o.id === orderId);
+      if (targetOrder) {
+        targetOrder.deliveryAddress = editedDeliveryAddress;
+      }
+    }
     setEditingOrderId(null);
-    showToast(`Saved updated produce scale weights for Order #${orderId}`);
+    showToast(`✅ Saved updated live order details & item weights for Order #${orderId}`);
+  };
+
+  const handleCancelOrder = (order: Order) => {
+    const reason = window.prompt(
+      `Cancel Order #${order.id} for ${order.customerName}?\nEnter cancellation reason (optional):`,
+      'Cancelled by shopkeeper'
+    );
+    if (reason === null) return;
+    onUpdateOrderStatus(order.id, 'rejected', reason.trim() || 'Cancelled by shopkeeper');
+    showToast(`❌ Order #${order.id} has been cancelled.`);
   };
 
   const handleSendWhatsAppToCustomer = (order: Order) => {
@@ -349,7 +404,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-32 relative">
+    <div className="space-y-4 pb-32 relative">
       {/* Toast Banner */}
       {toastMessage && (
         <div className="fixed top-20 right-5 z-50 max-w-md bg-emerald-950 text-emerald-100 border border-emerald-500/50 p-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-fadeIn">
@@ -358,10 +413,10 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
         </div>
       )}
 
-      {/* Tab Content: Manual Counter Sale (POS) */}
+      {/* Top Quick Sub-header Action for POS */}
       {activeTab === 'manual_sale' && (
         <div className="space-y-6 animate-fadeIn pb-24">
-          {/* Top POS Sub-header with Catalog / Checkout Toggle */}
+          {/* Top POS Sub-header with Catalog / Checkout Toggle & Quick Actions */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
             <div>
               <h3 className="font-black text-lg text-slate-900 flex items-center gap-2">
@@ -371,31 +426,51 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
               <p className="text-xs text-slate-500">Quickly pick items, build bills, and complete walk-in sales</p>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setIsQRModalOpen(true)}
+                className="px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all flex items-center gap-1.5 border border-slate-200/80"
+              >
+                <QrCode className="w-4 h-4 text-emerald-600" />
+                <span>Store QR</span>
+              </button>
+
+              {onAddOrder && (
+                <button
+                  type="button"
+                  onClick={() => setIsSimulateCustomerModalOpen(true)}
+                  className="px-3 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold text-xs transition-all flex items-center gap-1.5 border border-emerald-200"
+                >
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>Simulate Order</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => setPosView('catalog')}
-                className={`px-4 py-2.5 rounded-2xl font-black text-xs transition-all flex items-center gap-2 ${
+                className={`px-3.5 py-2 rounded-2xl font-black text-xs transition-all flex items-center gap-1.5 ${
                   posView === 'catalog'
                     ? 'bg-emerald-600 text-white shadow-md'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 <Package className="w-4 h-4" />
-                <span>Product Catalog</span>
+                <span>Catalog</span>
               </button>
               
               <button
                 type="button"
                 onClick={() => setPosView('checkout')}
-                className={`px-4 py-2.5 rounded-2xl font-black text-xs transition-all flex items-center gap-2 relative ${
+                className={`px-3.5 py-2 rounded-2xl font-black text-xs transition-all flex items-center gap-1.5 relative ${
                   posView === 'checkout'
                     ? 'bg-emerald-600 text-white shadow-md'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 <ShoppingBag className="w-4 h-4" />
-                <span>Bill & Checkout</span>
+                <span>Checkout</span>
                 {posCart.length > 0 && (
                   <span className="bg-rose-500 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-xs">
                     {posCart.length}
@@ -898,11 +973,29 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                               {order.status === 'sent_to_shopkeeper' ? 'Pending Approval' : order.status}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                          <p className="text-xs text-slate-500 flex flex-wrap items-center gap-2 mt-0.5">
                             <span>Phone: <strong className="text-slate-800">{order.customerPhone}</strong></span>
                             <span>•</span>
                             <span>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>•</span>
+                            {order.fulfillmentType === 'home_delivery' ? (
+                              <span className="font-extrabold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-amber-200">
+                                <Truck className="w-3 h-3 text-amber-700" />
+                                <span>Home Delivery</span>
+                              </span>
+                            ) : (
+                              <span className="font-bold text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                                <Store className="w-3 h-3 text-slate-500" />
+                                <span>Store Pickup</span>
+                              </span>
+                            )}
                           </p>
+                          {order.fulfillmentType === 'home_delivery' && order.deliveryAddress && (
+                            <p className="text-xs text-amber-950 font-medium bg-amber-50/80 px-2.5 py-1 rounded-lg border border-amber-200/80 mt-1 flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                              <span className="truncate">Address: <strong>{order.deliveryAddress}</strong></span>
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -923,9 +1016,9 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                         </div>
 
                         {(isEditingThis ? editedItems : order.items).map((item, idx) => (
-                          <div key={item.itemId + idx} className="flex items-center justify-between py-2 border-b border-slate-100/60 last:border-0">
-                            <div>
-                              <p className="font-extrabold text-xs text-slate-900">{item.name}</p>
+                          <div key={item.itemId + idx} className="flex items-center justify-between py-2 border-b border-slate-100/60 last:border-0 gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-extrabold text-xs text-slate-900 truncate">{item.name}</p>
                               <p className="text-[11px] text-slate-500">
                                 {formatCurrency(item.pricePerUnit)} / {item.unitType}
                               </p>
@@ -937,14 +1030,22 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                                   type="number"
                                   value={item.quantityOrWeight}
                                   onChange={(e) => handleWeightChange(idx, Number(e.target.value))}
-                                  className="w-24 px-2.5 py-1 bg-amber-50 border border-amber-300 rounded-lg text-xs font-bold text-center text-slate-900 outline-none"
+                                  className="w-20 sm:w-24 px-2 py-1 bg-amber-50 border border-amber-300 rounded-lg text-xs font-bold text-center text-slate-900 outline-none focus:ring-2 focus:ring-amber-500"
                                 />
                                 <span className="text-xs font-bold text-slate-600">
                                   {item.unitType === 'kg' ? 'g' : item.unitType}
                                 </span>
-                                <span className="text-xs font-black text-emerald-700 w-20 text-right">
+                                <span className="text-xs font-black text-emerald-700 w-16 sm:w-20 text-right font-mono">
                                   {formatCurrency(item.totalPrice)}
                                 </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveItemFromOrder(idx)}
+                                  className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                                  title="Remove item"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
                             ) : (
                               <div className="text-right">
@@ -958,50 +1059,115 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                             )}
                           </div>
                         ))}
+
+                        {/* In Live Order Edit Mode: Add Item & Extra Notes */}
+                        {isEditingThis && (
+                          <div className="mt-3 p-3 bg-amber-50/80 rounded-2xl border border-amber-200/90 space-y-3">
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <span className="text-xs font-bold text-amber-950 shrink-0">Add Produce Item:</span>
+                              <select
+                                value={addItemSelectId}
+                                onChange={(e) => setAddItemSelectId(e.target.value)}
+                                className="flex-1 text-xs font-medium bg-white border border-amber-300 rounded-xl px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-amber-500"
+                              >
+                                <option value="">-- Select Produce to Add --</option>
+                                {inventory.map((inv) => (
+                                  <option key={inv.id} value={inv.id}>
+                                    {inv.name} ({formatCurrency(inv.pricePerUnit)}/{inv.unitType})
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => handleAddItemToOrder(addItemSelectId)}
+                                disabled={!addItemSelectId}
+                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-1 shrink-0"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add</span>
+                              </button>
+                            </div>
+
+                            {/* Edit Delivery Address */}
+                            {order.fulfillmentType === 'home_delivery' && (
+                              <div className="space-y-1">
+                                <label className="text-[11px] font-bold text-amber-900 block">Edit Delivery Address:</label>
+                                <input
+                                  type="text"
+                                  value={editedDeliveryAddress}
+                                  onChange={(e) => setEditedDeliveryAddress(e.target.value)}
+                                  placeholder="House/flat no, street, landmark..."
+                                  className="w-full text-xs bg-white border border-amber-300 rounded-xl px-2.5 py-1 text-slate-900 outline-none"
+                                />
+                              </div>
+                            )}
+
+                            {/* Shopkeeper Note */}
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-bold text-amber-900 block">Shopkeeper Note / Scale Remark:</label>
+                              <input
+                                type="text"
+                                value={shopkeeperNote}
+                                onChange={(e) => setShopkeeperNote(e.target.value)}
+                                placeholder="e.g. Weighing verified on digital counter scale"
+                                className="w-full text-xs bg-white border border-amber-300 rounded-xl px-2.5 py-1 text-slate-900 outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons Bar */}
                       <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          {!isEditingThis && isPending && (
-                            <button
-                              onClick={() => startEditOrder(order)}
-                              className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs rounded-xl border border-amber-200 transition-colors flex items-center gap-1.5"
-                            >
-                              <Edit3 className="w-3.5 h-3.5 text-amber-700" />
-                              <span>Verify & Edit Scale Weight</span>
-                            </button>
-                          )}
-
-                          {isEditingThis && (
-                            <button
-                              onClick={() => saveEditedOrder(order.id)}
-                              className="px-3 py-2 bg-slate-900 text-white font-bold text-xs rounded-xl transition-colors"
-                            >
-                              Save Weights
-                            </button>
+                          {!isEditingThis ? (
+                            order.status !== 'rejected' && (
+                              <button
+                                onClick={() => startEditOrder(order)}
+                                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs rounded-xl border border-amber-200 transition-colors flex items-center gap-1.5"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                                <span>Edit Live Order & Items</span>
+                              </button>
+                            )
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => saveEditedOrder(order.id)}
+                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all"
+                              >
+                                Save Changes
+                              </button>
+                              <button
+                                onClick={() => setEditingOrderId(null)}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+                              >
+                                Cancel Edit
+                              </button>
+                            </div>
                           )}
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
-                          {isPending && (
-                            <>
-                              <button
-                                onClick={() => handleFastReject(order)}
-                                className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 transition-colors flex items-center gap-1"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                <span>Fast Reject</span>
-                              </button>
+                          {order.status !== 'rejected' && (
+                            <button
+                              onClick={() => handleCancelOrder(order)}
+                              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl border border-rose-200 transition-colors flex items-center gap-1"
+                              title="Cancel this order"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Cancel Order</span>
+                            </button>
+                          )}
 
-                              <button
-                                onClick={() => setRejectingOrderId(order.id)}
-                                className="px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs rounded-xl transition-colors flex items-center gap-1"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                <span>Decline w/ Reason</span>
-                              </button>
-                            </>
+                          {isPending && (
+                            <button
+                              onClick={() => setRejectingOrderId(order.id)}
+                              className="px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs rounded-xl transition-colors flex items-center gap-1"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Decline w/ Reason</span>
+                            </button>
                           )}
 
                           <button
@@ -1458,83 +1624,63 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
         />
       )}
 
-      {/* Ultra-Modern, Luxury Floating Bottom Navigation Dock */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur-2xl border border-slate-700/60 p-2.5 rounded-3xl flex items-center gap-2 shadow-[0_25px_60px_rgba(0,0,0,0.6)] ring-1 ring-white/15">
+      {/* Fixed Bottom Navigation Bar (Matching Customer Page Style) */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2 flex items-center justify-around shadow-xl">
         <button
           type="button"
           onClick={() => setActiveTab('manual_sale')}
-          className={`group relative flex items-center gap-2 px-4 py-3 rounded-2xl transition-all duration-300 ${
+          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
             activeTab === 'manual_sale'
-              ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 text-slate-950 font-black shadow-[0_0_25px_rgba(245,158,11,0.5)] scale-105'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/80 font-bold text-xs'
+              ? 'text-emerald-700 font-black'
+              : 'text-slate-600 hover:text-emerald-700 font-semibold'
           }`}
         >
-          <div className={`p-1 rounded-xl transition-colors ${activeTab === 'manual_sale' ? 'bg-slate-950/10' : 'bg-slate-800/50 group-hover:bg-slate-700/50'}`}>
-            <DollarSign className={`w-4 h-4 transition-transform group-hover:scale-110 ${activeTab === 'manual_sale' ? 'text-slate-950' : 'text-amber-400'}`} />
-          </div>
-          <span className="text-xs tracking-tight">Counter POS</span>
-          {activeTab === 'manual_sale' && (
-            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-white rounded-full blur-[1px] animate-pulse" />
-          )}
+          <DollarSign className="w-5 h-5" />
+          <span className="text-[10px]">Counter POS</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('orders')}
-          className={`group relative flex items-center gap-2 px-4 py-3 rounded-2xl transition-all duration-300 ${
+          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors relative ${
             activeTab === 'orders'
-              ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 text-slate-950 font-black shadow-[0_0_25px_rgba(245,158,11,0.5)] scale-105'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/80 font-bold text-xs'
+              ? 'text-emerald-700 font-black'
+              : 'text-slate-600 hover:text-emerald-700 font-semibold'
           }`}
         >
-          <div className={`p-1 rounded-xl transition-colors relative ${activeTab === 'orders' ? 'bg-slate-950/10' : 'bg-slate-800/50 group-hover:bg-slate-700/50'}`}>
-            <Clock className={`w-4 h-4 transition-transform group-hover:scale-110 ${activeTab === 'orders' ? 'text-slate-950' : 'text-amber-400'}`} />
-            {pendingOrders.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-lg shadow-rose-500/60 animate-bounce border-2 border-slate-900">
-                {pendingOrders.length}
-              </span>
-            )}
-          </div>
-          <span className="text-xs tracking-tight">Live Orders</span>
-          {activeTab === 'orders' && (
-            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-white rounded-full blur-[1px] animate-pulse" />
+          <Clock className="w-5 h-5" />
+          <span className="text-[10px]">Live Queue</span>
+          {pendingOrders.length > 0 && (
+            <span className="absolute top-0 right-2 bg-emerald-600 text-white font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
+              {pendingOrders.length}
+            </span>
           )}
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('inventory')}
-          className={`group relative flex items-center gap-2 px-4 py-3 rounded-2xl transition-all duration-300 ${
+          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
             activeTab === 'inventory'
-              ? 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 text-slate-950 font-black shadow-[0_0_25px_rgba(16,185,129,0.5)] scale-105'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/80 font-bold text-xs'
+              ? 'text-emerald-700 font-black'
+              : 'text-slate-600 hover:text-emerald-700 font-semibold'
           }`}
         >
-          <div className={`p-1 rounded-xl transition-colors ${activeTab === 'inventory' ? 'bg-slate-950/10' : 'bg-slate-800/50 group-hover:bg-slate-700/50'}`}>
-            <Package className={`w-4 h-4 transition-transform group-hover:scale-110 ${activeTab === 'inventory' ? 'text-slate-950' : 'text-emerald-400'}`} />
-          </div>
-          <span className="text-xs tracking-tight">Product Stock</span>
-          {activeTab === 'inventory' && (
-            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-white rounded-full blur-[1px] animate-pulse" />
-          )}
+          <Package className="w-5 h-5" />
+          <span className="text-[10px]">Stock</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('store_settings')}
-          className={`group relative flex items-center gap-2 px-4 py-3 rounded-2xl transition-all duration-300 ${
+          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
             activeTab === 'store_settings'
-              ? 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 text-slate-950 font-black shadow-[0_0_25px_rgba(16,185,129,0.5)] scale-105'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/80 font-bold text-xs'
+              ? 'text-emerald-700 font-black'
+              : 'text-slate-600 hover:text-emerald-700 font-semibold'
           }`}
         >
-          <div className={`p-1 rounded-xl transition-colors ${activeTab === 'store_settings' ? 'bg-slate-950/10' : 'bg-slate-800/50 group-hover:bg-slate-700/50'}`}>
-            <Store className={`w-4 h-4 transition-transform group-hover:scale-110 ${activeTab === 'store_settings' ? 'text-slate-950' : 'text-emerald-400'}`} />
-          </div>
-          <span className="text-xs tracking-tight">Store & Hub</span>
-          {activeTab === 'store_settings' && (
-            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-white rounded-full blur-[1px] animate-pulse" />
-          )}
+          <Store className="w-5 h-5" />
+          <span className="text-[10px]">Store Hub</span>
         </button>
       </div>
     </div>

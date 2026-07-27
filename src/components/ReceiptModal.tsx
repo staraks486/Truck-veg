@@ -132,15 +132,33 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             </p>
           </div>
 
-          {/* Customer Details */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs flex justify-between items-center">
-            <div>
-              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Customer Name</span>
-              <span className="font-bold text-slate-900">{order.customerName}</span>
+          {/* Customer & Fulfillment Details */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-2">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Customer Name</span>
+                <span className="font-bold text-slate-900">{order.customerName}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Mobile Number</span>
+                <span className="font-mono text-slate-800 font-semibold">{order.customerPhone}</span>
+              </div>
             </div>
-            <div className="text-right">
-              <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block">Mobile Number</span>
-              <span className="font-mono text-slate-800 font-semibold">{order.customerPhone}</span>
+
+            <div className="pt-2 border-t border-slate-200 flex flex-col gap-1">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Order Delivery Mode</span>
+                <span className="font-extrabold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                  {order.fulfillmentType === 'home_delivery' ? '🚚 Express Home Delivery' : '🏪 Store Pickup / Self-Checkout'}
+                </span>
+              </div>
+
+              {order.fulfillmentType === 'home_delivery' && order.deliveryAddress && (
+                <div className="mt-1 bg-white p-2 rounded-lg border border-slate-200 text-[11px] text-slate-700">
+                  <span className="font-bold text-slate-900 block">📍 Delivery Address:</span>
+                  <p className="font-medium text-slate-800 leading-snug">{order.deliveryAddress}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -199,6 +217,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <span>Fresh Produce GST (0%)</span>
               <span>₹0.00</span>
             </div>
+            {order.fulfillmentType === 'home_delivery' && (
+              <div className="flex justify-between text-slate-700 font-semibold">
+                <span>Express Home Delivery Fee</span>
+                <span className="font-mono">
+                  {order.deliveryFee && order.deliveryFee > 0 ? formatCurrency(order.deliveryFee) : 'FREE'}
+                </span>
+              </div>
+            )}
             <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-base font-black text-slate-900">
               <span>Grand Total</span>
               <span className="text-lg text-emerald-800 font-mono">

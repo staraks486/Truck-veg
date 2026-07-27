@@ -51,8 +51,11 @@ export interface Order {
   subtotal: number;
   tax: number;
   platformFee: number;
+  deliveryFee?: number;
   grandTotal: number;
   status: OrderStatus;
+  fulfillmentType?: 'store_pickup' | 'home_delivery';
+  deliveryAddress?: string;
   rejectionReason?: string;
   shopkeeperNote?: string;
   createdAt: string;
@@ -64,6 +67,7 @@ export interface CustomerSession {
   name: string;
   phone: string;
   isLoggedIn: boolean;
+  deliveryAddress?: string;
   scannedStore?: {
     id: string;
     name: string;

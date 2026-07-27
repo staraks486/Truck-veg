@@ -45,6 +45,22 @@ export function generateOrderPDF(order: Order, action: 'download' | 'open' = 'do
   y += 4;
   doc.text(`Customer: ${order.customerName} (${order.customerPhone})`, 6, y);
 
+  if (order.fulfillmentType === 'home_delivery') {
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Delivery: Home Delivery`, 6, y);
+    if (order.deliveryAddress) {
+      y += 3.5;
+      doc.setFont('helvetica', 'normal');
+      let addrText = order.deliveryAddress;
+      if (addrText.length > 32) addrText = addrText.substring(0, 30) + '..';
+      doc.text(`Address: ${addrText}`, 6, y);
+    }
+  } else {
+    y += 4;
+    doc.text(`Delivery: Store Self-Checkout / Pickup`, 6, y);
+  }
+
   y += 4;
   doc.setDrawColor(203, 213, 225); // Slate 300
   doc.setLineWidth(0.3);
@@ -95,6 +111,12 @@ export function generateOrderPDF(order: Order, action: 'download' | 'open' = 'do
   y += 4;
   doc.text('Produce GST (0%):', 6, y);
   doc.text('₹0.00', pageWidth - 6, y, { align: 'right' });
+
+  if (order.fulfillmentType === 'home_delivery') {
+    y += 4;
+    doc.text('Delivery Fee:', 6, y);
+    doc.text(order.deliveryFee && order.deliveryFee > 0 ? `₹${order.deliveryFee.toFixed(2)}` : 'FREE', pageWidth - 6, y, { align: 'right' });
+  }
 
   y += 5;
   doc.setFont('helvetica', 'bold');

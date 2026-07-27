@@ -129,8 +129,18 @@ export default function App() {
   };
 
   // Submit order from Customer
-  const handleSubmitOrder = (customerName: string, customerPhone: string, sendViaWhatsApp: boolean = false) => {
+  const handleSubmitOrder = (
+    customerName: string,
+    customerPhone: string,
+    sendViaWhatsApp: boolean = false,
+    fulfillmentType: 'store_pickup' | 'home_delivery' = 'store_pickup',
+    deliveryAddress?: string,
+    deliveryFee: number = 0
+  ) => {
     const subtotal = cart.reduce((acc, curr) => acc + curr.calculatedPrice, 0);
+    const calculatedFee = fulfillmentType === 'home_delivery' ? deliveryFee : 0;
+    const grandTotal = subtotal + calculatedFee;
+
     const orderItems: OrderItem[] = cart.map((c) => ({
       itemId: c.itemId,
       name: c.item.name,
@@ -149,8 +159,11 @@ export default function App() {
       subtotal,
       tax: 0,
       platformFee: 0,
-      grandTotal: subtotal,
+      deliveryFee: calculatedFee,
+      grandTotal,
       status: 'sent_to_shopkeeper',
+      fulfillmentType,
+      deliveryAddress,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -159,11 +172,20 @@ export default function App() {
     setOrders(updatedOrders);
     saveStoredOrders(updatedOrders);
 
+    // Save customer name, mobile and address in customer session
+    if (deliveryAddress && deliveryAddress.trim()) {
+      handleSaveSession({
+        ...customerSession,
+        name: customerName,
+        phone: customerPhone,
+        deliveryAddress: deliveryAddress.trim()
+      });
+    }
+
     // Save customer name and mobile in shopkeeper data with order increment
-    registerOrUpdateCustomer(customerName, customerPhone, subtotal);
+    registerOrUpdateCustomer(customerName, customerPhone, grandTotal);
 
     if (soundEnabled) playChimeSound('order_sent');
-
 
     if (sendViaWhatsApp) {
       const message = formatOrderWhatsAppMessage(newOrder);
