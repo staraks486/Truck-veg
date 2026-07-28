@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { UserRole, InventoryItem, CartItem, Order, CustomerSession, OrderItem } from './types';
 import {
   getStoredInventory,
@@ -80,7 +81,9 @@ export default function App() {
     if (soundEnabled) playChimeSound('click');
     setCart((prev) => {
       const isKg = newItem.item.unitType === 'kg';
-      const maxStockGramsOrUnits = isKg ? (newItem.item.stockQuantity * 1000) : newItem.item.stockQuantity;
+      const currentInventoryItem = inventory.find(i => i.id === newItem.itemId);
+      const currentStock = currentInventoryItem ? currentInventoryItem.stockQuantity : newItem.item.stockQuantity;
+      const maxStockGramsOrUnits = isKg ? (currentStock * 1000) : currentStock;
       const existingIdx = prev.findIndex((c) => c.itemId === newItem.itemId);
 
       if (existingIdx > -1) {
@@ -94,7 +97,8 @@ export default function App() {
         copy[existingIdx] = {
           ...existing,
           quantityOrWeight: updatedGrams,
-          calculatedPrice: updatedPrice
+          calculatedPrice: updatedPrice,
+          item: currentInventoryItem || existing.item
         };
         return copy;
       }
@@ -104,7 +108,9 @@ export default function App() {
         ? (newItem.item.pricePerUnit * cappedQuantity) / 1000
         : newItem.item.pricePerUnit * cappedQuantity;
 
-      return [...prev, { ...newItem, quantityOrWeight: cappedQuantity, calculatedPrice }];
+      toast.success(`Added ${newItem.item.name} to cart`);
+
+      return [...prev, { ...newItem, quantityOrWeight: cappedQuantity, calculatedPrice, item: currentInventoryItem || newItem.item }];
     });
   };
 
@@ -114,7 +120,9 @@ export default function App() {
       prev.map((item) => {
         if (item.itemId === itemId) {
           const isKg = item.item.unitType === 'kg';
-          const maxStockGramsOrUnits = isKg ? (item.item.stockQuantity * 1000) : item.item.stockQuantity;
+          const currentInventoryItem = inventory.find(i => i.id === itemId);
+          const currentStock = currentInventoryItem ? currentInventoryItem.stockQuantity : item.item.stockQuantity;
+          const maxStockGramsOrUnits = isKg ? (currentStock * 1000) : currentStock;
           const cappedQuantity = Math.min(maxStockGramsOrUnits, Math.max(0, newGramsOrCount));
 
           const calculatedPrice = item.item.unitType === 'kg'
@@ -124,7 +132,8 @@ export default function App() {
           return {
             ...item,
             quantityOrWeight: cappedQuantity,
-            calculatedPrice
+            calculatedPrice,
+            item: currentInventoryItem || item.item // update item info if possible
           };
         }
         return item;
@@ -191,6 +200,24 @@ export default function App() {
     setOrders(updatedOrders);
     saveStoredOrders(updatedOrders);
 
+    // Deduct stock from inventory
+    const updatedInventory = inventory.map((invItem) => {
+      const cartItem = cart.find(c => c.itemId === invItem.id);
+      if (cartItem) {
+        const isKg = invItem.unitType === 'kg';
+        const reduction = isKg ? cartItem.quantityOrWeight / 1000 : cartItem.quantityOrWeight;
+        const newStock = Math.max(0, Number((invItem.stockQuantity - reduction).toFixed(2)));
+        return {
+          ...invItem,
+          stockQuantity: newStock,
+          inStock: newStock > 0
+        };
+      }
+      return invItem;
+    });
+    setInventory(updatedInventory);
+    saveStoredInventory(updatedInventory);
+
     // Save customer name, mobile and address in customer session
     if (deliveryAddress && deliveryAddress.trim()) {
       handleSaveSession({
@@ -211,24 +238,39 @@ export default function App() {
       openWhatsAppShare(message);
     }
 
+    toast.success("Order placed successfully!");
     setCart([]);
     setIsCartOpen(false);
     setActiveReceiptOrder(newOrder);
   };
 
-  // Shopkeeper status updates
+  // Shopkeeper & Customer status updates
   const handleUpdateOrderStatus = (
     orderId: string,
     status: Order['status'],
     rejectionReason?: string,
-    paymentMethod?: 'UPI' | 'Cash' | 'Card'
+    paymentMethod?: 'UPI' | 'Cash' | 'Card',
+    cancellationReason?: string,
+    cancelledBy?: 'customer' | 'shopkeeper'
   ) => {
+    let orderToRestore: Order | undefined;
+
     const updated = orders.map((order) => {
       if (order.id === orderId) {
+        const isCancel = status === 'cancelled';
+        const isReject = status === 'rejected';
+        
+        // If order is transitioning to cancelled/rejected from an active state, restore stock
+        if ((isCancel || isReject) && order.status !== 'cancelled' && order.status !== 'rejected') {
+          orderToRestore = order;
+        }
+
         return {
           ...order,
           status,
           rejectionReason: rejectionReason || order.rejectionReason,
+          cancellationReason: isCancel ? (cancellationReason || rejectionReason || 'Cancelled by user') : order.cancellationReason,
+          cancelledBy: isCancel ? (cancelledBy || 'customer') : order.cancelledBy,
           paymentMethod: paymentMethod || order.paymentMethod,
           updatedAt: new Date().toISOString()
         };
@@ -238,6 +280,29 @@ export default function App() {
 
     setOrders(updated);
     saveStoredOrders(updated);
+
+    if (orderToRestore) {
+      const updatedInventory = inventory.map(invItem => {
+        const orderItem = orderToRestore!.items.find(i => i.itemId === invItem.id);
+        if (orderItem) {
+          const isKg = invItem.unitType === 'kg';
+          const restoration = isKg ? orderItem.quantityOrWeight / 1000 : orderItem.quantityOrWeight;
+          const newStock = Number((invItem.stockQuantity + restoration).toFixed(2));
+          return {
+            ...invItem,
+            stockQuantity: newStock,
+            inStock: newStock > 0
+          };
+        }
+        return invItem;
+      });
+      setInventory(updatedInventory);
+      saveStoredInventory(updatedInventory);
+    }
+
+    if (soundEnabled) {
+      if (status === 'cancelled') playChimeSound('click');
+    }
   };
 
   // Shopkeeper weight adjustments on counter scale
@@ -305,6 +370,15 @@ export default function App() {
     };
     setCustomerSession(updated);
     saveStoredCustomerSession(updated);
+
+    if (!updated.isLoggedIn || !updated.name?.trim()) {
+      // New / not logged in customer -> send to login page
+      setCurrentView('auth');
+    } else {
+      // Already signed in -> give access to the app
+      setRole('customer');
+      setCurrentView('app');
+    }
   };
 
   const pendingOrderCount = orders.filter((o) => o.status === 'sent_to_shopkeeper').length;
@@ -328,41 +402,49 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-900 flex flex-col selection:bg-emerald-200">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col selection:bg-emerald-200">
       {/* Header Bar */}
-      <Header
-        role={role}
-        onRoleChange={(r) => {
-          if (soundEnabled) playChimeSound('click');
-          setRole(r);
-        }}
-        customerSession={customerSession}
-        onOpenLogin={() => setIsLoginModalOpen(true)}
-        onOpenQRScanner={() => setIsQRScannerModalOpen(true)}
-        cartItemCount={cart.length}
-        onOpenCart={() => setIsCartOpen(true)}
-        pendingOrderCount={pendingOrderCount}
-        soundEnabled={soundEnabled}
-        onToggleSound={() => setSoundEnabled(!soundEnabled)}
-        onLogout={() => {
-          if (soundEnabled) playChimeSound('click');
-          setCurrentView('auth');
-        }}
-      />
+      {role === 'shopkeeper' && (
+        <Header
+          role={role}
+          customerSession={customerSession}
+          onOpenLogin={() => setIsLoginModalOpen(true)}
+          onOpenQRScanner={() => setIsQRScannerModalOpen(true)}
+          cartItemCount={cart.length}
+          onOpenCart={() => setIsCartOpen(true)}
+          pendingOrderCount={pendingOrderCount}
+          soundEnabled={soundEnabled}
+          onToggleSound={() => setSoundEnabled(!soundEnabled)}
+          onLogout={() => {
+            if (soundEnabled) playChimeSound('click');
+            setCurrentView('auth');
+          }}
+          orders={orders}
+        />
+      )}
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className={`flex-1 w-full mx-auto ${role === 'shopkeeper' ? 'max-w-7xl px-4 sm:px-6 lg:px-8 py-6' : 'px-0 py-0'}`}>
         {role === 'customer' ? (
           <CustomerCatalog
             inventory={inventory}
             cart={cart}
             onAddToCart={handleAddToCart}
+            onUpdateQuantity={handleUpdateCartQuantity}
+            onRemoveItem={handleRemoveCartItem}
+            onClearCart={handleClearCart}
             onOpenCart={() => setIsCartOpen(true)}
             session={customerSession}
             onOpenQRScanner={() => setIsQRScannerModalOpen(true)}
             onOpenLogin={() => setIsLoginModalOpen(true)}
             activeOrder={activeCustomerOrder}
             onViewReceipt={(order) => setActiveReceiptOrder(order)}
+            onCancelOrder={(orderId, reason) =>
+              handleUpdateOrderStatus(orderId, 'cancelled', reason, undefined, reason, 'customer')
+            }
+            onLogout={() => setCurrentView('auth')}
+            orders={orders}
+            onSubmitOrder={handleSubmitOrder}
           />
         ) : (
           <ShopkeeperDashboard
@@ -399,6 +481,9 @@ export default function App() {
         onSubmitOrder={handleSubmitOrder}
         activeOrder={activeCustomerOrder}
         onViewReceipt={(order) => setActiveReceiptOrder(order)}
+        onCancelOrder={(orderId, reason) =>
+          handleUpdateOrderStatus(orderId, 'cancelled', reason, undefined, reason, 'customer')
+        }
       />
 
       {/* Login Modal */}

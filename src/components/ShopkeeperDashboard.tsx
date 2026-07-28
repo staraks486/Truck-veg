@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Order, InventoryItem, OrderItem, ProductOffer, CustomerRecord } from '../types';
 import { InventoryManager } from './InventoryManager';
 import { StoreQRGeneratorModal } from './StoreQRGeneratorModal';
@@ -82,7 +83,16 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   onViewOrderReceipt,
   onAddOrder
 }) => {
-  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'manual_sale' | 'store_settings'>('manual_sale');
+  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'manual_sale' | 'store_settings' | 'whatsapp_scheduler'>('manual_sale');
+
+  // Automated WhatsApp CRM & Scheduler State
+  const [schedulerCampaignType, setSchedulerCampaignType] = useState<'vip_reward' | 'win_back' | 'first_time' | 'all'>('vip_reward');
+  const [schedulerFrequency, setSchedulerFrequency] = useState<'instant' | 'daily_10am' | 'weekly_sunday'>('daily_10am');
+  const [isSchedulerActive, setIsSchedulerActive] = useState<boolean>(true);
+  const [schedulerLogs, setSchedulerLogs] = useState<{ id: string; customerName: string; phone: string; coupon: string; timestamp: string; status: string }[]>([
+    { id: 'LOG-01', customerName: 'Ramesh Kumar', phone: '9876543210', coupon: 'VIP20', timestamp: '2026-07-27 10:00 AM', status: 'Sent via WhatsApp' },
+    { id: 'LOG-02', customerName: 'Priya Sharma', phone: '9811223344', coupon: 'WELCOME50', timestamp: '2026-07-26 10:00 AM', status: 'Sent via WhatsApp' }
+  ]);
 
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
@@ -123,11 +133,10 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   // Multi-customer filter state
   const [selectedCustomerFilter, setSelectedCustomerFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleCompletePosSale = () => {
     if (posCart.length === 0) {
-      showToast('POS cart is empty. Add items to complete sale.');
+      toast('POS cart is empty. Add items to complete sale.');
       return;
     }
 
@@ -169,7 +178,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     registerOrUpdateCustomer(newOrder.customerName, newOrder.customerPhone, subtotal);
     setCustomersList(getStoredCustomers());
     playChimeSound('order_approved');
-    showToast(`✅ Successfully recorded POS Sale #${newOrder.id} for ${formatCurrency(subtotal)}!`);
+    toast.success(` Successfully recorded POS Sale #${newOrder.id} for ${formatCurrency(subtotal)}!`);
     
     // Automatically open receipt view for the generated bill
     onViewOrderReceipt(newOrder);
@@ -182,13 +191,13 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   const handleSaveStoreSettings = (e: React.FormEvent) => {
     e.preventDefault();
     saveStoredStoreConfig(storeConfig);
-    showToast('🏪 Store & Branch settings updated successfully!');
+    toast('🏪 Store & Branch settings updated successfully!');
   };
 
   const handleAddOffer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOfferTitle.trim()) {
-      showToast('Please enter an offer title.');
+      toast('Please enter an offer title.');
       return;
     }
     const newOffer: ProductOffer = {
@@ -210,14 +219,14 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     setNewOfferDiscountAmt('');
     setNewOfferCode('');
     setNewOfferItemId('ALL');
-    showToast('🎉 Successfully published store offer on product store!');
+    toast.success(' Successfully published store offer on product store!');
   };
 
   const handleDeleteOffer = (offerId: string) => {
     const updated = offers.filter(o => o.id !== offerId);
     setOffers(updated);
     saveStoredOffers(updated);
-    showToast('Offer removed successfully.');
+    toast('Offer removed successfully.');
   };
 
   // Compute analytics metrics
@@ -260,7 +269,104 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     });
   };
 
-  // Filtered orders list
+  const customerAnalytics = useMemo(() => {
+    const map = new Map<string, { name: string; phone: string; orderCount: number; totalSpent: number; lastOrderDate: string; itemsBought: string[] }>();
+
+    orders.forEach(ord => {
+      const phone = ord.customerPhone || 'Unknown';
+      const existing = map.get(phone) || {
+        name: ord.customerName || 'Valued Customer',
+        phone,
+        orderCount: 0,
+        totalSpent: 0,
+        lastOrderDate: ord.createdAt,
+        itemsBought: []
+      };
+
+      existing.orderCount += 1;
+      existing.totalSpent += ord.grandTotal || 0;
+      if (new Date(ord.createdAt) > new Date(existing.lastOrderDate)) {
+        existing.lastOrderDate = ord.createdAt;
+      }
+      ord.items.forEach(i => {
+        if (!existing.itemsBought.includes(i.name)) existing.itemsBought.push(i.name);
+      });
+      map.set(phone, existing);
+    });
+
+    return Array.from(map.values()).map(c => {
+      let tier: 'VIP Regular' | 'Active Buyer' | 'Dormant / Inactive' | 'New Customer' = 'Active Buyer';
+      let suggestedCoupon = 'FRESH10';
+      let couponDiscount = '10% OFF';
+
+      if (c.orderCount >= 3) {
+        tier = 'VIP Regular';
+        suggestedCoupon = 'VIP20';
+        couponDiscount = '20% OFF';
+      } else if (c.orderCount === 1) {
+        tier = 'New Customer';
+        suggestedCoupon = 'WELCOME50';
+        couponDiscount = '₹50 OFF';
+      } else {
+        const daysSinceLastOrder = (Date.now() - new Date(c.lastOrderDate).getTime()) / (1000 * 3600 * 24);
+        if (daysSinceLastOrder > 7) {
+          tier = 'Dormant / Inactive';
+          suggestedCoupon = 'COMEBACK15';
+          couponDiscount = '15% OFF';
+        }
+      }
+
+      return {
+        ...c,
+        tier,
+        suggestedCoupon,
+        couponDiscount
+      };
+    });
+  }, [orders]);
+
+  const handleTriggerCampaignForCustomer = (cust: typeof customerAnalytics[0]) => {
+    let msg = '';
+    if (cust.tier === 'VIP Regular') {
+      msg = `🌟 *VIP LOYALTY REWARD - FARMER'S GATE* 🌟\n━━━━━━━━━━━━━━━━━━━━━━\nHello *${cust.name}*,\n\nThank you for being one of our most valued VIP customers with ${cust.orderCount} orders! 🥦🍅\n\n🎉 *Your Exclusive VIP Coupon:* *${cust.suggestedCoupon}* (${cust.couponDiscount})\n\nApply this code on your next fresh grocery order to redeem your reward.\n\n_Fresh, organic, and handpicked daily._`;
+    } else if (cust.tier === 'Dormant / Inactive') {
+      msg = `🌿 *WE MISS YOU AT FARMER'S GATE!* 🌿\n━━━━━━━━━━━━━━━━━━━━━━\nHello *${cust.name}*,\n\nWe noticed you haven't ordered fresh produce in a while. Come back to farm-fresh goodness! 🍅🥦\n\n🎉 *Your Comeback Coupon:* *${cust.suggestedCoupon}* (${cust.couponDiscount})\n\nShop today and enjoy lightning-fast delivery or store pickup.\n\n_Fresh, organic, and handpicked daily._`;
+    } else if (cust.tier === 'New Customer') {
+      msg = `🌱 *WELCOME TO FARMER'S GATE!* 🌱\n━━━━━━━━━━━━━━━━━━━━━━\nHello *${cust.name}*,\n\nThanks for your first order! We hope you loved your fresh farm produce. 🥦🍅\n\n🎉 *Your Next-Order Coupon:* *${cust.suggestedCoupon}* (${cust.couponDiscount})\n\nOrder again this week for farm-fresh delivery.\n\n_Fresh, organic, and handpicked daily._`;
+    } else {
+      msg = `🌿 *FARMER'S GATE SPECIAL REWARD* 🌿\n━━━━━━━━━━━━━━━━━━━━━━\nHello *${cust.name}*,\n\nHere is a special token of appreciation for shopping with Farmer's Gate! 🍅🥦\n\n🎉 *Your Discount Coupon:* *${cust.suggestedCoupon}* (${cust.couponDiscount})\n\nExplore our fresh daily harvest catalog now.\n\n_Fresh, organic, and handpicked daily._`;
+    }
+
+    openWhatsAppShare(msg, cust.phone);
+
+    const newLog = {
+      id: `LOG-${Date.now().toString().slice(-4)}`,
+      customerName: cust.name,
+      phone: cust.phone,
+      coupon: cust.suggestedCoupon,
+      timestamp: new Date().toLocaleString(),
+      status: 'Sent via WhatsApp'
+    };
+    setSchedulerLogs(prev => [newLog, ...prev]);
+    toast.success(`WhatsApp campaign triggered for ${cust.name} with code ${cust.suggestedCoupon}!`);
+  };
+
+  const handleRunBatchCampaign = () => {
+    const matched = customerAnalytics.filter(c => {
+      if (schedulerCampaignType === 'vip_reward') return c.tier === 'VIP Regular';
+      if (schedulerCampaignType === 'win_back') return c.tier === 'Dormant / Inactive';
+      if (schedulerCampaignType === 'first_time') return c.tier === 'New Customer';
+      return true;
+    });
+
+    if (matched.length === 0) {
+      toast('No customers match the selected campaign filter criteria.');
+      return;
+    }
+
+    handleTriggerCampaignForCustomer(matched[0]);
+    toast.success(`Batch campaign started for ${matched.length} customer(s)! First WhatsApp opened.`);
+  };
   const filteredOrders = orders.filter((order) => {
     const matchesCustomer =
       selectedCustomerFilter === 'ALL' || order.customerPhone === selectedCustomerFilter;
@@ -274,13 +380,6 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
 
     return matchesCustomer && matchesSearch;
   });
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 4500);
-  };
 
   const startEditOrder = (order: Order) => {
     setEditingOrderId(order.id);
@@ -304,14 +403,14 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     if (order.items.length <= 1) {
       setCancelingOrderModal(order);
       setCancelReasonInput('Item cancelled / out of stock');
-      showToast(`Removing the last item will cancel Order #${order.id.slice(-4)}.`);
+      toast(`Removing the last item will cancel Order #${order.id.slice(-4)}.`);
       return;
     }
 
     const removedItem = order.items[itemIdx];
     const updatedItems = order.items.filter((_, idx) => idx !== itemIdx);
     onUpdateOrderWeights(order.id, updatedItems, order.shopkeeperNote);
-    showToast(`Removed "${removedItem.name}" from Order #${order.id.slice(-4)}.`);
+    toast(`Removed "${removedItem.name}" from Order #${order.id.slice(-4)}.`);
   };
 
   const handleRemoveItemFromOrder = (itemIdx: number) => {
@@ -324,13 +423,13 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
           return;
         }
       }
-      showToast('An order must contain at least 1 item. Cancel the order if all items are removed.');
+      toast('An order must contain at least 1 item. Cancel the order if all items are removed.');
       return;
     }
     const removed = editedItems[itemIdx];
     const updated = editedItems.filter((_, idx) => idx !== itemIdx);
     setEditedItems(updated);
-    showToast(`Removed "${removed?.name || 'item'}" from order draft.`);
+    toast(`Removed "${removed?.name || 'item'}" from order draft.`);
   };
 
   const handleAddItemToOrder = (inventoryItemId: string) => {
@@ -354,7 +453,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
 
     setEditedItems([...editedItems, newItem]);
     setAddItemSelectId('');
-    showToast(`Added ${inventoryItem.name} to live order!`);
+    toast(`Added ${inventoryItem.name} to live order!`);
   };
 
   const saveEditedOrder = (orderId: string) => {
@@ -366,7 +465,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
       }
     }
     setEditingOrderId(null);
-    showToast(`✅ Saved updated live order details & item weights for Order #${orderId}`);
+    toast.success(` Saved updated live order details & item weights for Order #${orderId}`);
   };
 
   const handleCancelOrder = (order: Order) => {
@@ -381,7 +480,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
       'rejected',
       cancelReasonInput.trim() || 'Cancelled by shopkeeper'
     );
-    showToast(`❌ Order #${cancelingOrderModal.id} has been cancelled.`);
+    toast.error(` Order #${cancelingOrderModal.id} has been cancelled.`);
     setCancelingOrderModal(null);
     setCancelReasonInput('Cancelled by shopkeeper');
   };
@@ -389,7 +488,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   const handleSendWhatsAppToCustomer = (order: Order) => {
     const msg = formatOrderWhatsAppMessage(order);
     openWhatsAppShare(msg, order.customerPhone);
-    showToast(`Opened WhatsApp with pre-filled bill for ${order.customerName}!`);
+    toast(`Opened WhatsApp with pre-filled bill for ${order.customerName}!`);
   };
 
   const handleSendInApp = (order: Order) => {
@@ -398,7 +497,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     }
     onUpdateOrderStatus(order.id, 'approved');
     setEditingOrderId(null);
-    showToast(`📱 Bill & Payment QR sent via App to ${order.customerName}! (Order #${order.id})`);
+    toast(`📱 Bill & Payment QR sent via App to ${order.customerName}! (Order #${order.id})`);
   };
 
   const handleFinalizeAndSendWhatsApp = (order: Order) => {
@@ -411,43 +510,35 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     const updatedOrder = { ...order, status: 'approved' as const };
     const msg = formatOrderWhatsAppMessage(updatedOrder);
     openWhatsAppShare(msg, order.customerPhone);
-    showToast(`Approved & opened WhatsApp bill for ${order.customerName}!`);
+    toast(`Approved & opened WhatsApp bill for ${order.customerName}!`);
   };
 
   const handleBulkApproveInApp = () => {
     pendingOrders.forEach((o) => {
       onUpdateOrderStatus(o.id, 'approved');
     });
-    showToast(`⚡ Bulk approved and sent all ${pendingOrders.length} pending counter bills in-app!`);
+    toast(`⚡ Bulk approved and sent all ${pendingOrders.length} pending counter bills in-app!`);
   };
 
   const handleRejectOrder = (orderId: string) => {
     onUpdateOrderStatus(orderId, 'rejected', rejectionReason || 'Scale weight discrepancy or item out of stock.');
     setRejectingOrderId(null);
     setRejectionReason('');
-    showToast(`Declined order #${orderId}. Updated customer screen.`);
+    toast(`Declined order #${orderId}. Updated customer screen.`);
   };
 
   const handleFastReject = (order: Order) => {
     onUpdateOrderStatus(order.id, 'rejected', 'Fast rejected by shopkeeper');
-    showToast(`⚡ Fast Rejected order #${order.id.slice(-6)} instantly.`);
+    toast(`⚡ Fast Rejected order #${order.id.slice(-6)} instantly.`);
   };
 
   const handleMarkAsPaid = (order: Order) => {
     onUpdateOrderStatus(order.id, 'approved');
-    showToast(`💳 Marked order #${order.id.slice(-6)} as Paid & Completed!`);
+    toast(`💳 Marked order #${order.id.slice(-6)} as Paid & Completed!`);
   };
 
   return (
     <div className="space-y-4 pb-32 relative">
-      {/* Toast Banner */}
-      {toastMessage && (
-        <div className="fixed top-20 right-5 z-50 max-w-md bg-emerald-950 text-emerald-100 border border-emerald-500/50 p-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-fadeIn">
-          <Sparkles className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-xs font-bold">{toastMessage}</span>
-        </div>
-      )}
-
       {/* POS Quick Controls without top banner */}
       {activeTab === 'manual_sale' && (
         <div className="space-y-6 animate-fadeIn pb-24">
@@ -572,7 +663,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                                       }
                                       return [...prev, { item, qtyOrWeight: preset.val }];
                                     });
-                                    showToast(`Added ${preset.label} ${item.name} to bill`);
+                                    toast(`Added ${preset.label} ${item.name} to bill`);
                                   }}
                                   className="px-2 py-1 bg-white hover:bg-emerald-600 hover:text-white text-slate-800 font-black text-[10px] rounded-lg border border-slate-200 shadow-2xs transition-all"
                                 >
@@ -599,7 +690,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                                 }
                                 return [...prev, { item, qtyOrWeight: defaultQty }];
                               });
-                              showToast(`Added 1 ${isKg ? 'kg' : item.unitType} ${item.name}`);
+                              toast(`Added 1 ${isKg ? 'kg' : item.unitType} ${item.name}`);
                             }}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-1 ml-auto"
                           >
@@ -812,10 +903,15 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
                               order.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
                               order.status === 'approved' ? 'bg-teal-100 text-teal-800' :
+                              order.status === 'cancelled' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
                               order.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
                               'bg-amber-100 text-amber-800'
                             }`}>
-                              {order.status === 'sent_to_shopkeeper' ? 'Pending Approval' : order.status}
+                              {order.status === 'sent_to_shopkeeper'
+                                ? 'Pending Approval'
+                                : order.status === 'cancelled'
+                                ? 'Cancelled by Customer'
+                                : order.status}
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 flex flex-wrap items-center gap-2 mt-0.5">
@@ -918,13 +1014,15 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                         ))}
 
                         {/* Cancelled/Rejected Banner */}
-                        {order.status === 'rejected' && (
+                        {(order.status === 'rejected' || order.status === 'cancelled') && (
                           <div className="mt-3 bg-rose-50 border border-rose-200 p-3 rounded-2xl flex items-start gap-2.5 text-xs text-rose-950">
                             <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                             <div>
-                              <span className="font-extrabold text-rose-900 block">Cancellation / Decline Reason:</span>
+                              <span className="font-extrabold text-rose-900 block">
+                                {order.status === 'cancelled' ? 'Cancelled by Customer Reason / Message:' : 'Cancellation / Decline Reason:'}
+                              </span>
                               <p className="font-semibold text-slate-800 mt-0.5">
-                                {order.rejectionReason || 'Order was cancelled or declined by shopkeeper.'}
+                                {order.cancellationReason || order.rejectionReason || 'Order was cancelled or declined.'}
                               </p>
                             </div>
                           </div>
@@ -1354,6 +1452,146 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
       {/* Tab Content: Store & Hub (Offers, Users, Stats, Settings) */}
       {activeTab === 'store_settings' && (
         <div className="space-y-8 animate-fadeIn max-w-5xl mx-auto">
+          {/* App Control Hub & Quick Action Icons */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 sm:p-8 rounded-3xl shadow-xl space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-4 border-b border-slate-700/60 pb-5">
+              <div>
+                <span className="bg-emerald-500/20 text-emerald-400 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">Control Panel</span>
+                <h3 className="text-xl sm:text-2xl font-black mt-2 tracking-tight">App Control Hub & Management</h3>
+                <p className="text-xs text-slate-400 mt-1">Quickly access and control all core POS app modules, checkout flows, and branch integrations.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsQRModalOpen(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
+                >
+                  <QrCode className="w-4 h-4 text-amber-300" />
+                  <span>View Store QR</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+              <button
+                type="button"
+                onClick={() => setActiveTab('manual_sale')}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">Counter POS</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Weigh & bill walk-in sales</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('orders')}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3 relative">
+                  <FileText className="w-5 h-5" />
+                  {pendingOrders.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-600 text-white font-bold text-[9px] rounded-full flex items-center justify-center">
+                      {pendingOrders.length}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">Bill Queue</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Manage customer orders</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('inventory')}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">Stock & Inventory</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Update prices & stock</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toast.success('Sales Ledger & Income report opened')}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-emerald-600/20 text-emerald-300 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">Sales & Income</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Revenue & cash flow</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toast.success('Store Expense Ledger opened')}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-rose-500/20 text-rose-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3">
+                  <Tag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">Expense Tracker</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Log farm & store costs</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toast.success('Daily & Monthly Reports generated')}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-indigo-500/20 text-indigo-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">Audit Reports</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Download GST & sales logs</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsQRModalOpen(true)}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-purple-500/20 text-purple-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">QR Code Generator</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Store scanner & posters</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSimulateCustomerModalOpen(true)}
+                className="bg-slate-800/80 hover:bg-slate-700 p-4 rounded-2xl border border-slate-700 text-left transition-all group flex flex-col justify-between"
+              >
+                <div className="w-10 h-10 bg-pink-500/20 text-pink-400 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform mb-3">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-xs sm:text-sm text-white">Simulate Customer</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Test mobile shopping view</p>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Section 1: Store & Branch Settings */}
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
             <div className="flex items-center gap-3.5 pb-5 border-b border-slate-100">
@@ -1449,6 +1687,70 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Login Page Photo & Banner Customizer */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center gap-3.5 pb-5 border-b border-slate-100">
+              <div className="p-3 bg-teal-50 text-teal-700 rounded-2xl border border-teal-200">
+                <Smartphone className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-black text-lg text-slate-900">Login Page Basket Photo & Banner</h3>
+                <p className="text-xs text-slate-500">
+                  Choose or update the featured hero photo displayed on the customer & shopkeeper login welcome screen
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { label: 'Harvest Basket', url: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80' },
+                  { label: 'Organic Greens', url: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=800&q=80' },
+                  { label: 'Fresh Fruits', url: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?auto=format&fit=crop&w=800&q=80' },
+                  { label: 'Market Stall', url: 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?auto=format&fit=crop&w=800&q=80' }
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      const updated = { ...storeConfig, loginPhotoUrl: preset.url };
+                      setStoreConfig(updated);
+                      saveStoredStoreConfig(updated);
+                      toast.success(`Login photo updated to "${preset.label}"`);
+                    }}
+                    className={`relative rounded-2xl overflow-hidden border-2 transition-all p-1.5 text-left group ${storeConfig.loginPhotoUrl === preset.url ? 'border-emerald-600 ring-2 ring-emerald-600/30 bg-emerald-50' : 'border-slate-200 hover:border-slate-300 bg-slate-50'}`}
+                  >
+                    <img src={preset.url} alt={preset.label} className="w-full h-24 object-cover rounded-xl group-hover:scale-105 transition-transform" />
+                    <span className="block text-[11px] font-extrabold text-slate-800 mt-1.5 px-1">{preset.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">Custom Login Photo Image URL</label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={storeConfig.loginPhotoUrl || ''}
+                    onChange={(e) => setStoreConfig({ ...storeConfig, loginPhotoUrl: e.target.value })}
+                    placeholder="https://images.unsplash.com/..."
+                    className="flex-1 px-4 py-2.5 bg-slate-50 text-xs border border-slate-300 rounded-xl font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveStoredStoreConfig(storeConfig);
+                      toast.success("Login page photo saved successfully!");
+                    }}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+                  >
+                    Save Photo
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Section 2: Product Store Offers & Discounts Page */}
@@ -1688,6 +1990,203 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
         </div>
       )}
 
+      {/* Tab Content: Automated WhatsApp Scheduler */}
+      {activeTab === 'whatsapp_scheduler' && (
+        <div className="space-y-6 animate-fadeIn pb-24">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-green-950 text-white rounded-3xl p-6 shadow-lg border border-emerald-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-emerald-500/20 text-emerald-300 rounded-2xl border border-emerald-400/30">
+                <MessageSquare className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-black text-lg text-white">Automated WhatsApp Coupon Scheduler & CRM</h3>
+                <p className="text-xs text-emerald-200 mt-0.5">
+                  Trigger personalized WhatsApp messages with unique discount coupons based on purchase frequency and order history.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-emerald-900/80 px-4 py-2 rounded-2xl border border-emerald-700 text-xs font-black">
+              <span className={`w-2.5 h-2.5 rounded-full ${isSchedulerActive ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+              <span>{isSchedulerActive ? 'Auto-Scheduler Active (Cron 10 AM)' : 'Scheduler Paused'}</span>
+            </div>
+          </div>
+
+          {/* Campaign Config Panel */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-5">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+              <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-2xl">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-black text-sm text-slate-900">Configure Automated Campaign Trigger</h4>
+                <p className="text-xs text-slate-500">Select audience segment and frequency for automated WhatsApp dispatch</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1.5">Target Customer Segment</label>
+                <select
+                  value={schedulerCampaignType}
+                  onChange={(e) => setSchedulerCampaignType(e.target.value as any)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                >
+                  <option value="vip_reward">🌟 VIP Regular Customers (3+ Orders) → VIP20 (20% OFF)</option>
+                  <option value="win_back">💤 Dormant / Inactive Customers (7+ Days) → COMEBACK15 (15% OFF)</option>
+                  <option value="first_time">🌱 First-Time Buyer Nudge (1 Order) → WELCOME50 (₹50 OFF)</option>
+                  <option value="all">🎁 All Customers Broadcast → FRESH10 (10% OFF)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1.5">Automated Scheduling Frequency</label>
+                <select
+                  value={schedulerFrequency}
+                  onChange={(e) => setSchedulerFrequency(e.target.value as any)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                >
+                  <option value="daily_10am">⏰ Daily Auto-Pilot (10:00 AM Every Morning)</option>
+                  <option value="weekly_sunday">📅 Weekly Rewards Auto-Trigger (Sunday 9 AM)</option>
+                  <option value="instant">⚡ Instant Manual Campaign Run</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="schedulerToggle"
+                  checked={isSchedulerActive}
+                  onChange={(e) => setIsSchedulerActive(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded"
+                />
+                <label htmlFor="schedulerToggle" className="text-xs font-bold text-slate-700 cursor-pointer">
+                  Enable automated background dispatch schedule
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={handleRunBatchCampaign}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 active:scale-95"
+              >
+                <Send className="w-4 h-4" />
+                <span>Run Campaign Now ({customerAnalytics.length} Customers)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Customer Segments & Purchase Frequency Cards */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-teal-50 text-teal-700 rounded-2xl">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-black text-base text-slate-900">Customer Purchase Frequency & Coupon Assignment</h4>
+                  <p className="text-xs text-slate-500">Analyzed from order history and activity</p>
+                </div>
+              </div>
+              <span className="text-xs font-black text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+                {customerAnalytics.length} Profiles Tracked
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {customerAnalytics.map((cust) => (
+                <div key={cust.phone} className="p-4.5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-emerald-300 transition-all space-y-3 flex flex-col justify-between">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h5 className="font-black text-sm text-slate-900">{cust.name}</h5>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          cust.tier === 'VIP Regular' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
+                          cust.tier === 'Dormant / Inactive' ? 'bg-rose-100 text-rose-900 border border-rose-300' :
+                          cust.tier === 'New Customer' ? 'bg-blue-100 text-blue-900 border border-blue-300' :
+                          'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        }`}>
+                          {cust.tier}
+                        </span>
+                      </div>
+                      <p className="text-xs font-mono text-slate-500 mt-0.5">+91 {cust.phone}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="font-mono font-black text-emerald-800 text-sm">{formatCurrency(cust.totalSpent)}</span>
+                      <p className="text-[10px] text-slate-400">{cust.orderCount} order{cust.orderCount !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-bold">Assigned Coupon:</span>
+                      <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded text-[11px]">{cust.suggestedCoupon}</span>
+                      <span className="text-[11px] text-emerald-700 font-extrabold ml-1.5">({cust.couponDiscount})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerCampaignForCustomer(cust)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 active:scale-95 shrink-0"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Send WhatsApp</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Automated Scheduler Logs */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+              <div className="p-2.5 bg-blue-50 text-blue-700 rounded-2xl">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-black text-base text-slate-900">Automated Dispatch Logs</h4>
+                <p className="text-xs text-slate-500">History of automated WhatsApp messages and coupon triggers</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-500 font-extrabold uppercase text-[10px]">
+                  <tr>
+                    <th className="p-3 rounded-l-xl">Customer Name</th>
+                    <th className="p-3">Phone</th>
+                    <th className="p-3">Coupon Assigned</th>
+                    <th className="p-3">Timestamp</th>
+                    <th className="p-3 rounded-r-xl">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {schedulerLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50/80">
+                      <td className="p-3 font-extrabold text-slate-900">{log.customerName}</td>
+                      <td className="p-3 font-mono text-slate-600">+91 {log.phone}</td>
+                      <td className="p-3">
+                        <span className="font-mono font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
+                          {log.coupon}
+                        </span>
+                      </td>
+                      <td className="p-3 text-slate-500 font-mono text-[11px]">{log.timestamp}</td>
+                      <td className="p-3">
+                        <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full text-[10px]">
+                          ✓ {log.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* QR Modal */}
       <StoreQRGeneratorModal
         isOpen={isQRModalOpen}
@@ -1702,7 +2201,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
           inventory={inventory}
           onAddOrder={(newOrder) => {
             onAddOrder(newOrder);
-            showToast(`Created new checkout order #${newOrder.id} for ${newOrder.customerName}!`);
+            toast(`Created new checkout order #${newOrder.id} for ${newOrder.customerName}!`);
           }}
         />
       )}
@@ -1775,6 +2274,19 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
         >
           <Store className="w-5 h-5" />
           <span className="text-[10px]">Store Hub</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('whatsapp_scheduler')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 transition-colors ${
+            activeTab === 'whatsapp_scheduler'
+              ? 'text-emerald-700 font-black'
+              : 'text-slate-600 hover:text-emerald-700 font-semibold'
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
+          <span className="text-[10px]">Auto WhatsApp</span>
         </button>
       {/* Cancel Order Confirmation Modal */}
       {cancelingOrderModal && (

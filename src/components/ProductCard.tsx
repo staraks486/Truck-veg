@@ -72,17 +72,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
 
   const fallbackImage = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80';
 
-  const displayQuantityText = isKg
-    ? quantityOrWeight >= 1000
-      ? `${(quantityOrWeight / 1000).toFixed(quantityOrWeight % 1000 === 0 ? 0 : 2).replace(/\.?0+$/, '')} kg`
-      : `${quantityOrWeight} g`
-    : `${quantityOrWeight} ${item.unitType}`;
-
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 hover:border-emerald-500/50 hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col justify-between p-2.5 group relative">
       {/* Product Image & Badges */}
       <div>
-        <div className="relative h-24 bg-slate-50 rounded-xl overflow-hidden mb-2 border border-slate-100">
+        <div className="relative h-28 bg-slate-50 rounded-xl overflow-hidden mb-2 border border-slate-100">
           <img
             src={imgError ? fallbackImage : item.image}
             alt={item.name}
@@ -90,14 +84,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
-
           {/* Organic Badge */}
           {item.isOrganic && (
             <span className="absolute top-1.5 left-1.5 bg-emerald-700/90 backdrop-blur-xs text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs">
               <Leaf className="w-2.5 h-2.5 text-emerald-200" /> Organic
             </span>
           )}
-
           {/* In Cart Badge */}
           {existingCartItem && (
             <span className="absolute top-1.5 right-1.5 bg-emerald-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-2xs flex items-center gap-0.5">
@@ -184,16 +176,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
               </>
             )}
           </button>
-        </div>
-
-        {/* Total Price for Selected Quantity & Stock Limit Note */}
-        <div className="flex items-center justify-between text-[10px] px-0.5 text-slate-500 font-medium">
-          <span>{displayQuantityText}</span>
-          {isStockCapped ? (
-            <span className="font-extrabold text-amber-700">Max stock limit</span>
-          ) : (
-            <span className="font-black text-emerald-700">{formatCurrency(computedPrice)}</span>
-          )}
         </div>
       </div>
     </div>

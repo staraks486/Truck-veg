@@ -58,6 +58,7 @@ export interface StoreConfig {
   taxRate: number;
   operatingHours: string;
   upiId: string;
+  loginPhotoUrl?: string;
 }
 
 export function getStoredStoreConfig(): StoreConfig {
@@ -74,7 +75,8 @@ export function getStoredStoreConfig(): StoreConfig {
     phone: '+91 98765 43210',
     taxRate: 0,
     operatingHours: '06:00 AM - 09:00 PM Daily',
-    upiId: 'farmersgate@okaxis'
+    upiId: 'farmersgate@okaxis',
+    loginPhotoUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80'
   };
   localStorage.setItem(STORE_CONFIG_KEY, JSON.stringify(defaultConfig));
   return defaultConfig;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Order } from '../types';
-import { X, CheckCircle2, QrCode, Printer, Clock, AlertTriangle, ShieldCheck, Sparkles, Phone, Download, MessageSquare, FileText } from 'lucide-react';
+import { X, CheckCircle2, QrCode, Printer, Clock, AlertTriangle, ShieldCheck, Sparkles, Phone, Download, MessageSquare, FileText, XCircle } from 'lucide-react';
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import { formatCurrency, formatWeightOrUnits } from '../utils/storageManager';
@@ -11,7 +11,14 @@ interface ReceiptModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: Order | null;
-  onUpdateOrderStatus: (orderId: string, newStatus: Order['status'], paymentMethod?: 'UPI' | 'Cash' | 'Card') => void;
+  onUpdateOrderStatus: (
+    orderId: string,
+    newStatus: Order['status'],
+    paymentMethod?: 'UPI' | 'Cash' | 'Card',
+    rejectionReason?: string,
+    cancellationReason?: string,
+    cancelledBy?: 'customer' | 'shopkeeper'
+  ) => void;
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({
@@ -22,6 +29,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 }) => {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  // Cancellation Modal state
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('Changed my mind');
+  const [customNote, setCustomNote] = useState('');
 
   useEffect(() => {
     if (order && order.grandTotal > 0) {
@@ -254,7 +266,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
           {/* Payment Section according to Status */}
           {order.status === 'sent_to_shopkeeper' && (
-            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-center space-y-2 animate-pulse">
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-center space-y-3 animate-pulse">
               <Clock className="w-8 h-8 text-amber-600 mx-auto" />
               <div className="inline-block px-3 py-1 bg-amber-200 text-amber-950 font-black text-xs rounded-full uppercase tracking-wider">
                 Status: WAITING FOR SHOPKEEPER
@@ -262,6 +274,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <p className="text-xs text-amber-800 max-w-sm mx-auto font-medium leading-relaxed">
                 <strong>Status Update Message:</strong> Your self-checkout cart order has been sent to the shopkeeper's scale. Please wait a moment while the shopkeeper accepts your produce items & scale weights.
               </p>
+
+              <button
+                type="button"
+                onClick={() => setIsCancelModalOpen(true)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-xs inline-flex items-center gap-1.5 active:scale-95 mt-1"
+              >
+                <XCircle className="w-4 h-4" />
+                <span>Cancel Self-Checkout Order</span>
+              </button>
             </div>
           )}
 
@@ -285,7 +306,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 </div>
               )}
 
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col gap-2">
                 <button
                   onClick={() => handleSimulatePayment('UPI')}
                   disabled={isProcessingPayment}
@@ -299,6 +320,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                       <span>Simulate UPI Payment ({formatCurrency(order.grandTotal)})</span>
                     </>
                   )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCancelModalOpen(true)}
+                  className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Cancel Order Instead</span>
                 </button>
               </div>
             </div>
@@ -315,6 +345,26 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </p>
               <div className="p-2 bg-white rounded-lg border border-emerald-200 text-[11px] text-emerald-700 font-medium inline-block">
                 Thank you for shopping at {order.storeName}!
+              </div>
+            </div>
+          )}
+
+          {order.status === 'cancelled' && (
+            <div className="p-4 bg-rose-50 rounded-2xl border border-rose-300 text-center space-y-2.5 animate-fadeIn">
+              <div className="w-10 h-10 bg-rose-600 text-white rounded-full flex items-center justify-center mx-auto shadow-md">
+                <XCircle className="w-6 h-6" />
+              </div>
+              <div className="inline-block px-3 py-1 bg-rose-200 text-rose-950 font-black text-xs rounded-full uppercase tracking-wider">
+                Status: CANCELLED BY CUSTOMER
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-rose-200 text-xs text-rose-950 space-y-1 text-left max-w-sm mx-auto shadow-2xs">
+                <span className="font-extrabold block text-rose-900 flex items-center gap-1">
+                  <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>Cancellation Message:</span>
+                </span>
+                <p className="text-slate-800 leading-relaxed font-semibold text-[11px]">
+                  {order.cancellationReason || order.rejectionReason || 'Order was cancelled by customer.'}
+                </p>
               </div>
             </div>
           )}
@@ -390,6 +440,102 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             Close
           </button>
         </div>
+
+        {/* Cancellation Reason Modal Overlay */}
+        {isCancelModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200 text-left">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 text-rose-700 font-black text-base">
+                  <XCircle className="w-5 h-5" />
+                  <span>Cancel Order #{order.id}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCancelModalOpen(false)}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200 text-xs text-rose-950 space-y-1">
+                <p className="font-extrabold flex items-center justify-between">
+                  <span>Self-Checkout Order #{order.id}</span>
+                  <span className="font-mono text-rose-900">{formatCurrency(order.grandTotal)}</span>
+                </p>
+                <p className="text-[11px] text-rose-800 leading-relaxed font-medium">
+                  Confirm cancellation? The shopkeeper will be notified immediately and item stock unreserved.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-800 block">
+                  Cancellation Reason / Note for Shopkeeper:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Changed my mind",
+                    "Selected wrong items or weight",
+                    "Will pay directly at counter",
+                    "Other reason"
+                  ].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        setCancelReason(r);
+                        if (r !== "Other reason") setCustomNote('');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+                        cancelReason === r
+                          ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  value={customNote}
+                  onChange={(e) => setCustomNote(e.target.value)}
+                  placeholder="Enter custom cancellation note for shopkeeper (optional)..."
+                  rows={2}
+                  className="w-full text-xs font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white transition-all mt-2"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCancelModalOpen(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const finalReason = cancelReason === 'Other reason'
+                      ? (customNote.trim() || 'Cancelled by customer')
+                      : customNote.trim()
+                      ? `${cancelReason} - ${customNote.trim()}`
+                      : cancelReason;
+
+                    onUpdateOrderStatus(order.id, 'cancelled', undefined, undefined, finalReason, 'customer');
+                    setIsCancelModalOpen(false);
+                  }}
+                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>Confirm Cancellation</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

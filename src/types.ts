@@ -43,7 +43,7 @@ export interface CartItem {
   calculatedPrice: number;
 }
 
-export type OrderStatus = 'sent_to_shopkeeper' | 'reviewed' | 'approved' | 'rejected' | 'paid';
+export type OrderStatus = 'sent_to_shopkeeper' | 'reviewed' | 'approved' | 'rejected' | 'paid' | 'cancelled';
 
 export interface OrderItem {
   itemId: string;
@@ -71,6 +71,8 @@ export interface Order {
   promoCode?: string;
   discountAmount?: number;
   rejectionReason?: string;
+  cancellationReason?: string;
+  cancelledBy?: 'customer' | 'shopkeeper';
   shopkeeperNote?: string;
   createdAt: string;
   updatedAt: string;
