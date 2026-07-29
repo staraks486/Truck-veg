@@ -145,7 +145,7 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="bg-white text-slate-900 rounded-t-[36px] sm:rounded-t-[40px] px-6 pt-8 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.15)] relative z-20"
+        className="bg-white text-slate-900 rounded-t-[36px] sm:rounded-[32px] px-6 pt-8 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.15)] relative z-20 max-w-md mx-auto w-full sm:mb-8 sm:border sm:border-slate-100/80"
       >
         {step === 'intro' && (
           <div className="space-y-6 text-center max-w-sm mx-auto">
