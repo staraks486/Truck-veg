@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Order } from '../types';
-import { X, CheckCircle2, QrCode, Printer, Clock, AlertTriangle, ShieldCheck, Sparkles, Phone, Download, MessageSquare, FileText, XCircle } from 'lucide-react';
+import { X, CheckCircle2, QrCode, Printer, Clock, AlertTriangle, ShieldCheck, Sparkles, Phone, Download, MessageSquare, FileText, XCircle, CreditCard, DollarSign } from 'lucide-react';
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import { formatCurrency, formatWeightOrUnits } from '../utils/storageManager';
@@ -307,25 +307,52 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               )}
 
               <div className="pt-2 flex flex-col gap-2">
-                <button
-                  onClick={() => handleSimulatePayment('UPI')}
-                  disabled={isProcessingPayment}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-98 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isProcessingPayment ? (
-                    <span>Verifying UPI Payment...</span>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Simulate UPI Payment ({formatCurrency(order.grandTotal)})</span>
-                    </>
-                  )}
-                </button>
+                <div className="text-[11px] font-extrabold text-slate-700 text-left uppercase tracking-wider">
+                  Select Payment Method to Complete Order:
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSimulatePayment('UPI')}
+                    disabled={isProcessingPayment}
+                    className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+                    <span>Pay UPI</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSimulatePayment('Cash')}
+                    disabled={isProcessingPayment}
+                    className="py-2.5 px-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
+                  >
+                    <DollarSign className="w-4 h-4 text-amber-200" />
+                    <span>Pay Cash</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSimulatePayment('Card')}
+                    disabled={isProcessingPayment}
+                    className="py-2.5 px-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
+                  >
+                    <CreditCard className="w-4 h-4 text-indigo-200" />
+                    <span>Pay Card</span>
+                  </button>
+                </div>
+
+                {isProcessingPayment && (
+                  <div className="py-2 text-center text-xs font-bold text-emerald-900 animate-pulse bg-white rounded-xl border border-emerald-300">
+                    ⏳ Verifying & confirming payment...
+                  </div>
+                )}
 
                 <button
                   type="button"
                   onClick={() => setIsCancelModalOpen(true)}
-                  className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 mt-1"
                 >
                   <XCircle className="w-4 h-4" />
                   <span>Cancel Order Instead</span>

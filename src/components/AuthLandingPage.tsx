@@ -221,16 +221,20 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Mobile Number (Optional)
+                Indian Mobile Number (+91)
               </label>
               <div className="relative flex items-center">
-                <Phone className="absolute left-3 w-4 h-4 text-slate-400" />
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg text-xs font-bold text-slate-700 border border-slate-200">
+                  <span>🇮🇳</span>
+                  <span>+91</span>
+                </div>
                 <input
                   type="tel"
+                  maxLength={10}
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="e.g. 98765 43210"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B] transition-all"
+                  onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9876543210"
+                  className="w-full pl-24 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B] transition-all font-mono"
                 />
               </div>
             </div>

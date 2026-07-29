@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryItem, Category, CartItem, CustomerSession, Order } from '../types';
 import { ProductCard } from './ProductCard';
-import { Search, Mic, Home, Tag as OfferTag, User, ChevronRight, ShoppingBag, QrCode, LogOut, Bell, Trash2, Truck, MapPin, Store, AlertTriangle, Tag, Sparkles, Check, ShieldCheck, Receipt, MessageSquare } from 'lucide-react';
-import { formatCurrency, formatWeightOrUnits } from '../utils/storageManager';
-import { openWhatsAppShare } from '../utils/whatsappHelper';
+import { Search, Mic, Home, Tag as OfferTag, User, ChevronRight, ShoppingBag, QrCode, LogOut, Bell, Trash2, Truck, MapPin, Store, AlertTriangle, Tag, Sparkles, Check, ShieldCheck, Receipt, RotateCcw, CheckCircle2, XCircle, Clock, Percent } from 'lucide-react';
+import { formatCurrency, formatWeightOrUnits, getStoredStoreConfig, StoreConfig } from '../utils/storageManager';
+import { AppliedPromo, PRESET_PROMO_CODES, parsePromoCode, calculatePromoDiscount } from '../utils/promoManager';
+import { toast } from 'sonner';
 
 interface CustomerCatalogProps {
   inventory: InventoryItem[];
@@ -53,25 +54,47 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
   onLogout,
   orders = [],
   onSubmitOrder,
-  onOpenLogin
+  onOpenLogin,
+  activeOrder,
+  onViewReceipt
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const availableCategories = useMemo(() => {
+    const catsInInventory = Array.from(new Set(inventory.map((i) => i.category).filter(Boolean)));
+    return ['All', ...catsInInventory];
+  }, [inventory]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeTab, setActiveTab] = useState<'home' | 'offers' | 'cart' | 'profile'>('home');
+
+  const [storeConfig, setStoreConfig] = useState<StoreConfig>(getStoredStoreConfig());
+
+  useEffect(() => {
+    const handleStateChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail || detail.type === 'store_config') {
+        setStoreConfig(getStoredStoreConfig());
+      }
+    };
+    window.addEventListener('app-state-change', handleStateChange as EventListener);
+    return () => window.removeEventListener('app-state-change', handleStateChange as EventListener);
+  }, []);
 
   // Cart checkout state
   const [fulfillmentType, setFulfillmentType] = useState<'store_pickup' | 'home_delivery'>('store_pickup');
   const [deliveryAddress, setDeliveryAddress] = useState(session.deliveryAddress || '');
   const [promoInput, setPromoInput] = useState('');
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number; label: string } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [addressError, setAddressError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const subtotal = cart.reduce((acc, curr) => acc + curr.calculatedPrice, 0);
   const tax = 0;
-  const computedDiscount = appliedPromo ? Math.min(subtotal, appliedPromo.discount) : 0;
+  
+  // Dynamic promo discount calculation (supports percentage & flat-rate)
+  const { discount: computedDiscount, isValid: promoIsValid, errorReason: activePromoError } = calculatePromoDiscount(appliedPromo, subtotal);
   const deliveryFee = fulfillmentType === 'home_delivery' ? (subtotal >= 300 ? 0 : 30) : 0;
   const grandTotal = Math.max(0, subtotal - computedDiscount + tax + deliveryFee);
 
@@ -79,66 +102,35 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
   const progressToFreeDelivery = Math.min(100, (subtotal / freeDeliveryThreshold) * 100);
   const amountNeededForFreeDelivery = Math.max(0, freeDeliveryThreshold - subtotal);
 
-  const PRESET_OFFERS = [
-    { code: 'FRESH10', label: '10% OFF Fresh Produce', icon: '🏷️' },
-    { code: 'WELCOME50', label: '₹50 OFF (Min ₹250)', icon: '🎁' },
-    { code: 'ORGANIC20', label: '₹20 OFF Organic Veggies', icon: '🥦' },
-  ];
-
   const suggestedProducts = useMemo(() => {
     const cartItemIds = new Set(cart.map(c => c.itemId));
     return inventory.filter(item => !cartItemIds.has(item.id) && item.stockQuantity > 0).slice(0, 6);
   }, [inventory, cart]);
-
-  const handleSendWelcomeWhatsApp = () => {
-    const welcomeMsg = `🌿 *WELCOME TO FARMER'S GATE!* 🌿
-━━━━━━━━━━━━━━━━━━━━━━
-Hello *${session.name || 'Valued Customer'}*,
-
-Thank you for logging in and joining our fresh organic produce store! 🥦🍅
-
-🎉 *Your First-Login Welcome Offer:*
-Use coupon code *WELCOME50* on your first order of ₹250 or more to get *₹50 OFF* instantly!
-Or use *FRESH10* for 10% OFF on all fresh vegetables and fruits.
-
-Shop now and enjoy farm-fresh quality delivered straight to your door or ready for store pickup.
-
-_Fresh, organic, and handpicked daily._`;
-    openWhatsAppShare(welcomeMsg, session.phone);
-  };
 
   const handleApplyPromoCode = (codeToApply?: string) => {
     const code = (codeToApply || promoInput).trim().toUpperCase();
     setPromoError(null);
 
     if (!code) {
-      setPromoError('Please enter a valid coupon code.');
+      setPromoError('Please enter a valid promo or coupon code.');
       return;
     }
 
-    if (code === 'FRESH10') {
-      const discount = Math.round(subtotal * 0.10);
-      setAppliedPromo({ code: 'FRESH10', discount, label: '10% OFF Fresh Produce' });
-      setPromoInput('');
-    } else if (code === 'WELCOME50') {
-      if (subtotal < 250) {
-        setPromoError('Cart subtotal must be at least ₹250 for WELCOME50.');
-        return;
-      }
-      setAppliedPromo({ code: 'WELCOME50', discount: 50, label: '₹50 Flat Welcome Offer' });
-      setPromoInput('');
-    } else if (code === 'ORGANIC20') {
-      if (subtotal < 100) {
-        setPromoError('Cart subtotal must be at least ₹100 for ORGANIC20.');
-        return;
-      }
-      setAppliedPromo({ code: 'ORGANIC20', discount: 20, label: '₹20 Organic Discount' });
-      setPromoInput('');
-    } else {
-      const discount = Math.min(subtotal, Math.max(10, Math.round(subtotal * 0.05)));
-      setAppliedPromo({ code, discount, label: `${code} Applied (Special Discount)` });
-      setPromoInput('');
+    const rule = parsePromoCode(code);
+    if (rule.minSpend && subtotal < rule.minSpend) {
+      setPromoError(`Cart subtotal (₹${subtotal.toFixed(0)}) must be at least ₹${rule.minSpend} to use ${code}. Add ₹${(rule.minSpend - subtotal).toFixed(0)} more items.`);
+      return;
     }
+
+    setAppliedPromo({
+      code: rule.code,
+      type: rule.type,
+      value: rule.value,
+      label: rule.label,
+      minSpend: rule.minSpend
+    });
+    setPromoInput('');
+    setPromoError(null);
   };
 
   const handleRemovePromo = () => {
@@ -187,7 +179,7 @@ _Fresh, organic, and handpicked daily._`;
   }, [inventory, searchQuery, selectedCategory]);
 
   const customerNotifications = useMemo(() => {
-    return orders
+    const list = orders
       .filter(o => o.customerPhone === session.phone && (o.status === 'approved' || o.status === 'rejected' || o.status === 'cancelled' || o.status === 'paid'))
       .map(o => ({
         id: o.id,
@@ -196,7 +188,59 @@ _Fresh, organic, and handpicked daily._`;
         date: o.updatedAt,
         type: o.status === 'approved' || o.status === 'paid' ? 'success' : 'error'
       }));
+
+    const promoOffers = [
+      {
+        id: 'promo-welcome',
+        title: '🎉 First-Login Welcome Offer',
+        message: 'Welcome to Farmer\'s Gate! Use coupon code WELCOME50 to get ₹50 OFF on orders above ₹250.',
+        date: new Date().toISOString(),
+        type: 'success' as const
+      },
+      {
+        id: 'promo-fresh',
+        title: '🌿 Fresh Produce Coupon',
+        message: 'Use coupon code FRESH10 for 10% OFF on all fresh fruits & vegetables.',
+        date: new Date(Date.now() - 3600000).toISOString(),
+        type: 'success' as const
+      }
+    ];
+
+    return [...promoOffers, ...list];
   }, [orders, session.phone]);
+
+  const handleReorder = (order: Order) => {
+    let addedCount = 0;
+    order.items.forEach(orderItem => {
+      const invItem = inventory.find(i => i.id === orderItem.itemId);
+      if (invItem && invItem.inStock && invItem.stockQuantity > 0) {
+        const isKg = invItem.unitType === 'kg';
+        const maxStockGramsOrUnits = isKg ? Math.round(invItem.stockQuantity * 1000) : invItem.stockQuantity;
+        const qtyToAdd = Math.min(maxStockGramsOrUnits, orderItem.quantityOrWeight);
+
+        if (qtyToAdd > 0) {
+          const calculatedPrice = isKg
+            ? (invItem.pricePerUnit * qtyToAdd) / 1000
+            : invItem.pricePerUnit * qtyToAdd;
+
+          onAddToCart({
+            itemId: invItem.id,
+            item: invItem,
+            quantityOrWeight: qtyToAdd,
+            calculatedPrice
+          });
+          addedCount++;
+        }
+      }
+    });
+
+    if (addedCount > 0) {
+      toast.success(`Successfully added ${addedCount} available item(s) from Order #${order.id} to cart!`);
+      setActiveTab('cart');
+    } else {
+      toast.error('None of the items from this order are currently in stock.');
+    }
+  };
 
   const userName = session.name || 'Guest';
   const cartBadgeCount = cart.length;
@@ -288,11 +332,82 @@ _Fresh, organic, and handpicked daily._`;
 
       {activeTab === 'home' && (
         <div className="px-6 space-y-6 mt-4">
+          {/* Active Order Status Notification Banner */}
+          {activeOrder && onViewReceipt && (
+            <div className={`p-4 rounded-3xl shadow-sm border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all ${
+              activeOrder.status === 'approved'
+                ? 'bg-slate-900 text-white border-emerald-500 shadow-emerald-950/20'
+                : activeOrder.status === 'rejected'
+                ? 'bg-slate-900 text-white border-rose-500 shadow-rose-950/20'
+                : 'bg-slate-900 text-white border-amber-500 shadow-amber-950/20'
+            }`}>
+              <div className="flex items-center gap-3.5">
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                  activeOrder.status === 'approved'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    : activeOrder.status === 'rejected'
+                    ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                }`}>
+                  {activeOrder.status === 'approved' ? (
+                    <CheckCircle2 className="w-6 h-6 animate-pulse text-emerald-400" />
+                  ) : activeOrder.status === 'rejected' ? (
+                    <XCircle className="w-6 h-6 text-rose-400" />
+                  ) : (
+                    <Clock className="w-6 h-6 animate-spin text-amber-400" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                      activeOrder.status === 'approved'
+                        ? 'bg-emerald-500 text-slate-950'
+                        : activeOrder.status === 'rejected'
+                        ? 'bg-rose-500 text-white'
+                        : 'bg-amber-500 text-slate-950'
+                    }`}>
+                      {activeOrder.status === 'approved'
+                        ? 'Order Approved'
+                        : activeOrder.status === 'rejected'
+                        ? 'Order Declined'
+                        : 'Reviewing Order'}
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono font-bold">#{activeOrder.id}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-200 mt-1">
+                    {activeOrder.status === 'approved'
+                      ? `Your bill of ₹${activeOrder.grandTotal.toFixed(2)} is ready! Click to pay.`
+                      : activeOrder.status === 'rejected'
+                      ? `Declined by store.${activeOrder.rejectionReason ? ` Reason: "${activeOrder.rejectionReason}"` : ''}`
+                      : 'Order sent to shopkeeper. Awaiting weight confirmation.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onViewReceipt(activeOrder)}
+                className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold shrink-0 flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 ${
+                  activeOrder.status === 'approved'
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950'
+                    : activeOrder.status === 'rejected'
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950'
+                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950'
+                }`}
+              >
+                <Receipt className="w-4 h-4" />
+                {activeOrder.status === 'approved'
+                  ? 'View Bill & Pay'
+                  : activeOrder.status === 'rejected'
+                  ? 'View Details'
+                  : 'Track Status'}
+              </button>
+            </div>
+          )}
+
           {/* Promotional Banner */}
           <div className="relative overflow-hidden bg-[#57864B] rounded-3xl p-6 flex items-center justify-between h-[150px] shadow-sm">
             <div className="relative z-10 w-2/3 flex flex-col justify-center h-full">
-              <h2 className="text-[20px] font-bold text-white mb-1 tracking-tight">Fresh & Healthy</h2>
-              <p className="text-xs text-green-50 mb-3 font-medium tracking-wide">Get 20% Off on all vegetables</p>
+              <h2 className="text-[20px] font-bold text-white mb-1 tracking-tight">{storeConfig.bannerTitle || 'Fresh & Healthy'}</h2>
+              <p className="text-xs text-green-50 mb-3 font-medium tracking-wide">{storeConfig.bannerSubtitle || 'Get 20% Off on all vegetables'}</p>
               <button 
                 onClick={() => setActiveTab('offers')}
                 className="bg-white text-gray-900 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1 hover:bg-gray-50 transition-colors w-fit shadow-xs"
@@ -302,7 +417,7 @@ _Fresh, organic, and handpicked daily._`;
             </div>
             <div className="absolute right-[-30px] top-[-20px] bottom-[-20px] w-[55%]">
               <img 
-                src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80" 
+                src={storeConfig.bannerImageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80"} 
                 alt="Fresh vegetables" 
                 className="w-full h-full object-cover object-left-top" 
                 style={{ WebkitMaskImage: 'linear-gradient(to right, transparent, black 30%)' }}
@@ -310,37 +425,13 @@ _Fresh, organic, and handpicked daily._`;
             </div>
           </div>
 
-          {/* WhatsApp First Login Welcome Offer Card */}
-          {session.isLoggedIn && (
-            <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-green-950 text-white p-4.5 rounded-3xl shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 border border-emerald-800/40">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-700/80 rounded-2xl flex items-center justify-center text-emerald-200 shrink-0 border border-emerald-500/40 shadow-inner">
-                  <MessageSquare className="w-5 h-5 text-emerald-300" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-xs sm:text-sm text-white flex items-center gap-1.5">
-                    <span>First Login WhatsApp Offer</span>
-                    <span className="text-[10px] bg-emerald-800 text-emerald-200 px-2 py-0.5 rounded-full font-mono">WELCOME50</span>
-                  </h4>
-                  <p className="text-[11px] text-emerald-200 mt-0.5">Send automated welcome greeting & ₹50 coupon to +91 {session.phone}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleSendWelcomeWhatsApp}
-                className="w-full sm:w-auto px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs rounded-2xl shadow-md transition-all shrink-0 flex items-center justify-center gap-1.5"
-              >
-                <span>Send WhatsApp Offer</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+
 
           {/* Categories */}
           <div>
             <h3 className="text-lg font-bold text-gray-900 mb-3">Categories</h3>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none px-1 -mx-1">
-              {CATEGORIES.map((cat) => (
+              {availableCategories.map((cat) => (
                 <button 
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
@@ -375,6 +466,23 @@ _Fresh, organic, and handpicked daily._`;
 
       {activeTab === 'offers' && (
         <div className="px-6 space-y-4 mt-4">
+          {/* Offer Page Promotional Banner */}
+          <div className="relative overflow-hidden rounded-3xl h-[130px] shadow-sm flex items-center p-6 text-white">
+            <div className="absolute inset-0 z-0">
+              <img
+                src={storeConfig.offerPageBgUrl || 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80'}
+                alt="Offers Banner"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-950/90 via-emerald-900/70 to-transparent" />
+            </div>
+            <div className="relative z-10 max-w-xs">
+              <span className="bg-emerald-500 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-md uppercase tracking-wider mb-1 inline-block">Exclusive Deals</span>
+              <h2 className="text-lg font-black tracking-tight">Special Store Discounts</h2>
+              <p className="text-xs text-emerald-100 font-medium mt-0.5">Save big on your daily fresh groceries & organic produce.</p>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-black text-gray-900">Active Offers & Discounts</h2>
             <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-full">3 Available</span>
@@ -480,29 +588,7 @@ _Fresh, organic, and handpicked daily._`;
             )}
           </div>
 
-          {/* Account Bar */}
-          <div className="bg-emerald-900 text-emerald-100 px-4 py-2.5 rounded-2xl flex items-center justify-between text-xs shadow-sm">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <span className="font-bold text-[11px] text-emerald-200 shrink-0">Account:</span>
-              {session.phone ? (
-                <span className="font-mono font-black text-white bg-emerald-950 px-2.5 py-0.5 rounded-lg border border-emerald-700 text-[11px] truncate flex items-center gap-1">
-                  <span>+91 {session.phone}</span>
-                  <Check className="w-3 h-3 text-lime-400" />
-                </span>
-              ) : (
-                <span className="text-[10px] font-extrabold text-amber-300 bg-amber-950 px-2 py-0.5 rounded-lg">
-                  Guest Mode
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={onOpenLogin}
-              className="text-[11px] font-black text-lime-300 hover:text-white bg-emerald-800 hover:bg-emerald-700 px-3 py-1 rounded-xl transition-all"
-            >
-              {session.isLoggedIn ? 'Account' : 'Link Phone'}
-            </button>
-          </div>
+
 
           {/* Free Delivery Progress */}
           {cart.length > 0 && fulfillmentType === 'home_delivery' && (
@@ -640,49 +726,111 @@ _Fresh, organic, and handpicked daily._`;
           {cart.length > 0 && (
             <div className="space-y-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
               {/* Coupons */}
-              <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl space-y-2">
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-lime-50 border border-emerald-200/90 p-3.5 rounded-2xl space-y-2.5 shadow-2xs">
                 <div className="flex items-center justify-between text-xs font-black text-emerald-950">
-                  <span className="flex items-center gap-1"><Tag className="w-3.5 h-3.5 text-emerald-700" /> Coupons & Savings</span>
+                  <span className="flex items-center gap-1.5"><Tag className="w-4 h-4 text-emerald-700" /> Apply Promo Code & Coupons</span>
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                 </div>
                 {!appliedPromo ? (
                   <div className="space-y-2">
-                    <div className="flex gap-2">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleApplyPromoCode();
+                      }}
+                      className="flex gap-2"
+                    >
                       <input
                         type="text"
                         value={promoInput}
-                        onChange={(e) => setPromoInput(e.target.value)}
-                        placeholder="Enter coupon (e.g. FRESH10)"
-                        className="flex-1 px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs uppercase font-mono text-slate-900"
+                        onChange={(e) => {
+                          setPromoInput(e.target.value);
+                          if (promoError) setPromoError(null);
+                        }}
+                        placeholder="Enter promo code (e.g. FRESH10, 20OFF, WELCOME50)"
+                        className="flex-1 px-3 py-2 bg-white border border-emerald-300 rounded-xl text-xs uppercase font-mono text-slate-900 outline-none focus:ring-2 focus:ring-emerald-600"
                       />
                       <button
-                        type="button"
-                        onClick={() => handleApplyPromoCode()}
-                        className="px-4 py-1.5 bg-emerald-800 text-white text-xs font-black rounded-xl"
+                        type="submit"
+                        className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-black rounded-xl shadow-xs transition-all active:scale-95"
                       >
                         Apply
                       </button>
-                    </div>
-                    {promoError && <p className="text-[11px] font-bold text-rose-600">{promoError}</p>}
-                    <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                      {PRESET_OFFERS.map(offer => (
-                        <button
-                          key={offer.code}
-                          type="button"
-                          onClick={() => handleApplyPromoCode(offer.code)}
-                          className="px-2.5 py-1 bg-white border border-emerald-300 rounded-xl text-[10px] font-black text-emerald-950 shrink-0"
-                        >
-                          {offer.icon} {offer.code}
-                        </button>
-                      ))}
+                    </form>
+                    {promoError && (
+                      <p className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded-xl flex items-center gap-1.5 animate-fadeIn">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                        <span>{promoError}</span>
+                      </p>
+                    )}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-500 block">Quick Promo Presets:</span>
+                      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        {PRESET_PROMO_CODES.map((offer) => (
+                          <button
+                            key={offer.code}
+                            type="button"
+                            onClick={() => handleApplyPromoCode(offer.code)}
+                            className="px-2.5 py-1.5 bg-white hover:bg-emerald-100 border border-emerald-300 rounded-xl text-[10px] font-extrabold text-emerald-950 shrink-0 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                          >
+                            <span>{offer.icon || '🏷️'}</span>
+                            <span className="font-mono text-emerald-900">{offer.code}</span>
+                            <span className={`px-1 py-0.2 rounded text-[9px] font-black ${
+                              offer.type === 'percent'
+                                ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                                : 'bg-amber-100 text-amber-900 border border-amber-200'
+                            }`}>
+                              {offer.type === 'percent' ? `${offer.value}% OFF` : `₹${offer.value} OFF`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-emerald-100 p-2.5 rounded-xl flex items-center justify-between text-xs text-emerald-950">
-                    <div>
-                      <span className="font-mono font-black uppercase bg-white px-1.5 py-0.5 rounded text-[10px]">{appliedPromo.code}</span>
-                      <span className="font-black text-emerald-900 ml-2">- {formatCurrency(computedDiscount)} Saved</span>
+                  <div className="space-y-1.5">
+                    <div className="bg-emerald-100/90 border border-emerald-300 p-3 rounded-xl flex items-center justify-between text-xs text-emerald-950 shadow-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 bg-emerald-700 text-white rounded-xl shrink-0">
+                          {appliedPromo.type === 'percent' ? (
+                            <Percent className="w-4 h-4" />
+                          ) : (
+                            <Check className="w-4 h-4" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 font-black text-emerald-950">
+                            <span className="font-mono uppercase bg-white px-2 py-0.5 rounded border border-emerald-300 text-xs text-emerald-900">
+                              {appliedPromo.code}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-200 text-[10px] font-black uppercase text-emerald-900">
+                              {appliedPromo.type === 'percent' ? `${appliedPromo.value}% Percentage Discount` : `₹${appliedPromo.value} Flat Discount`}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-900 font-extrabold mt-1 flex items-center gap-1">
+                            <span>{appliedPromo.label}</span>
+                            <strong className="text-emerald-950 bg-emerald-300/80 px-1.5 py-0.2 rounded font-mono font-black">
+                              Saved {formatCurrency(computedDiscount)}
+                            </strong>
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemovePromo}
+                        className="p-1.5 text-emerald-800 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-emerald-200 hover:border-rose-300"
+                        title="Remove promo code"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button type="button" onClick={handleRemovePromo} className="text-rose-600 font-bold text-xs">Remove</button>
+
+                    {activePromoError && (
+                      <p className="text-[11px] font-bold text-amber-900 bg-amber-100/90 border border-amber-300 p-2 rounded-xl flex items-center gap-1.5 animate-fadeIn">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+                        <span>{activePromoError}</span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -770,7 +918,7 @@ _Fresh, organic, and handpicked daily._`;
       )}
 
       {activeTab === 'profile' && (
-        <div className="px-6 space-y-4 mt-4">
+        <div className="px-6 space-y-4 mt-4 max-w-2xl mx-auto">
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm text-center">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-black text-2xl mx-auto mb-3">
               {userName.charAt(0).toUpperCase()}
@@ -786,6 +934,61 @@ _Fresh, organic, and handpicked daily._`;
                 <p className="text-xs text-gray-400 font-semibold">Saved Address</p>
                 <p className="text-sm font-black text-emerald-700">Store Pickup</p>
               </div>
+            </div>
+          </div>
+
+          {/* Order History & Reorder Section */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-sm text-slate-900">Your Order History & Reorder</h3>
+              <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full">
+                {orders.filter(o => o.customerPhone === session.phone).length} Orders
+              </span>
+            </div>
+
+            <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+              {orders.filter(o => o.customerPhone === session.phone).length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  No previous orders found. Place an order to see your history & reorder items!
+                </div>
+              ) : (
+                orders
+                  .filter(o => o.customerPhone === session.phone)
+                  .map(order => (
+                    <div key={order.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-mono font-black text-xs text-slate-900">#{order.id}</span>
+                          <span className="text-[10px] text-slate-500 ml-2">{new Date(order.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                          order.status === 'approved' || order.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                          order.status === 'rejected' || order.status === 'cancelled' ? 'bg-rose-100 text-rose-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {order.status}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-slate-600 space-y-1">
+                        <p className="font-medium truncate">
+                          {order.items.map(i => `${i.name} (${formatWeightOrUnits(i.quantityOrWeight, i.unitType)})`).join(', ')}
+                        </p>
+                        <div className="flex justify-between items-center pt-1 font-bold">
+                          <span className="text-slate-900">Total: {formatCurrency(order.grandTotal)}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleReorder(order)}
+                            className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs rounded-xl shadow-xs flex items-center gap-1 transition-colors active:scale-95 cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Reorder</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              )}
             </div>
           </div>
 
@@ -808,16 +1011,7 @@ _Fresh, organic, and handpicked daily._`;
           <span className="text-[10px] font-bold">Home</span>
         </button>
 
-        <button 
-          onClick={onOpenQRScanner} 
-          className="flex flex-col items-center gap-1 text-emerald-700 hover:text-emerald-800 transition-transform active:scale-95"
-          title="Scan Product QR Code"
-        >
-          <div className="w-9 h-9 bg-emerald-600 text-white rounded-full flex items-center justify-center shadow-md shadow-emerald-600/30">
-            <QrCode className="w-5 h-5" />
-          </div>
-          <span className="text-[10px] font-bold">Scan</span>
-        </button>
+
 
         <button 
           onClick={() => setActiveTab('offers')} 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { InventoryItem, CartItem } from '../types';
-import { Plus, Check, Leaf } from 'lucide-react';
+import { Plus, Check, Leaf, Star } from 'lucide-react';
 import { formatCurrency } from '../utils/storageManager';
 
 interface ProductCardProps {
@@ -84,9 +84,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
+          {/* Favorite Badge */}
+          {item.isFavorite && (
+            <span className="absolute top-1.5 left-1.5 bg-amber-500/90 backdrop-blur-xs text-white text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs z-10">
+              <Star className="w-2.5 h-2.5 fill-white" /> Popular
+            </span>
+          )}
           {/* Organic Badge */}
           {item.isOrganic && (
-            <span className="absolute top-1.5 left-1.5 bg-emerald-700/90 backdrop-blur-xs text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs">
+            <span className={`absolute top-1.5 ${item.isFavorite ? 'left-16' : 'left-1.5'} bg-emerald-700/90 backdrop-blur-xs text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs`}>
               <Leaf className="w-2.5 h-2.5 text-emerald-200" /> Organic
             </span>
           )}
@@ -98,12 +104,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, cart, onAddToCar
           )}
         </div>
 
-        {/* Product Title, Rate & Stock Info */}
+        {/* Product Title, Regional Names & Price */}
         <div className="space-y-0.5 px-0.5">
           <h3 className="font-black text-slate-900 text-xs line-clamp-1 group-hover:text-emerald-700 transition-colors">
             {item.name}
           </h3>
-          <div className="flex items-center justify-between text-[11px] font-black text-slate-800">
+
+          {item.regionalName && (
+            <div className="text-[10px] font-bold text-amber-900 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md truncate" title={item.regionalName}>
+              {item.regionalName}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between text-[11px] font-black text-slate-800 pt-0.5">
             <span>
               {formatCurrency(item.pricePerUnit)} <span className="text-[10px] text-slate-400 font-normal">/ {item.unitType}</span>
             </span>

@@ -5,6 +5,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'veg-1',
     name: 'Fresh Red Tomatoes',
+    regionalName: 'Tamatar (टमाटर) • Tamatar (ਟਮਾਟਰ)',
+    hindiName: 'Tamatar (टमाटर)',
+    punjabiName: 'Tamatar (ਟਮਾਟਰ)',
     category: 'Daily Essentials',
     pricePerUnit: 40,
     unitType: 'kg',
@@ -13,11 +16,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=600&q=80',
     description: 'Farm-fresh vine ripened red tomatoes, juicy and packed with Vitamin C.',
     origin: 'Nashik Organic Farms',
-    isOrganic: true
+    isOrganic: true,
+    isFavorite: true
   },
   {
     id: 'veg-2',
     name: 'Organic Farm Potatoes',
+    regionalName: 'Aloo (आलू) • Aloo (ਆਲੂ)',
+    hindiName: 'Aloo (आलू)',
+    punjabiName: 'Aloo (ਆਲੂ)',
     category: 'Root Vegetables',
     pricePerUnit: 30,
     unitType: 'kg',
@@ -26,11 +33,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     image: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=600&q=80',
     description: 'Nutrient-dense clean potatoes, ideal for everyday cooking and roasting.',
     origin: 'Satara Highlands',
-    isOrganic: true
+    isOrganic: true,
+    isFavorite: true
   },
   {
     id: 'veg-3',
     name: 'Fresh Red Onions',
+    regionalName: 'Pyaz (प्याज़) • Pyaz (ਪਿਆਜ਼)',
+    hindiName: 'Pyaz (प्याज़)',
+    punjabiName: 'Pyaz (ਪਿਆਜ਼)',
     category: 'Daily Essentials',
     pricePerUnit: 35,
     unitType: 'kg',
@@ -39,11 +50,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     image: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cf?auto=format&fit=crop&w=600&q=80',
     description: 'Crisp, pungent red onions harvested fresh for long shelf life.',
     origin: 'Lasalgaon Wholesale Market',
-    isOrganic: false
+    isOrganic: false,
+    isFavorite: true
   },
   {
     id: 'veg-4',
     name: 'Tender Green Spinach (Palak)',
+    regionalName: 'Palak (पालक) • Palak (ਪਾਲਕ)',
+    hindiName: 'Palak (पालक)',
+    punjabiName: 'Palak (ਪਾਲਕ)',
     category: 'Leafy Greens',
     pricePerUnit: 25,
     unitType: 'bunch',
@@ -52,11 +67,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
     image: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&w=600&q=80',
     description: 'Iron-rich washed tender spinach bunches from local hydroponic farms.',
     origin: 'Green Valley Hydroponics',
-    isOrganic: true
+    isOrganic: true,
+    isFavorite: true
   },
   {
     id: 'veg-5',
     name: 'Crunchy Orange Carrots',
+    regionalName: 'Gajar (गाजर) • Gajar (ਗਾਜਰ)',
+    hindiName: 'Gajar (गाजर)',
+    punjabiName: 'Gajar (ਗਾਜਰ)',
     category: 'Root Vegetables',
     pricePerUnit: 50,
     unitType: 'kg',
@@ -70,6 +89,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'veg-6',
     name: 'Aromatic Garlic Pods',
+    regionalName: 'Lahsun (लहसुन) • Lahsun (ਲਸਣ)',
+    hindiName: 'Lahsun (लहसुन)',
+    punjabiName: 'Lahsun (ਲਸਣ)',
     category: 'Daily Essentials',
     pricePerUnit: 180,
     unitType: 'kg',
@@ -83,6 +105,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'veg-7',
     name: 'Sweet Alphonso Mangoes',
+    regionalName: 'Aam (आम) • Amb (ਅੰਬ)',
+    hindiName: 'Aam (आम)',
+    punjabiName: 'Amb (ਅੰਬ)',
     category: 'Exotic Fruits',
     pricePerUnit: 150,
     unitType: 'kg',
@@ -96,12 +121,15 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'veg-8',
     name: 'Fresh Coriander / Cilantro',
+    regionalName: 'Dhaniya (धनिया) • Dhaniya (ਧਨੀਆ)',
+    hindiName: 'Dhaniya (धनिया)',
+    punjabiName: 'Dhaniya (ਧਨੀਆ)',
     category: 'Organic Herbs',
     pricePerUnit: 15,
     unitType: 'bunch',
     stockQuantity: 30,
     inStock: true,
-    image: 'https://images.unsplash.com/photo-1588879460405-592f768b556b?auto=format&fit=crop&w=600&q=80',
+    image: 'https://images.unsplash.com/photo-1599940824399-b87987ceb72a?auto=format&fit=crop&w=600&q=80',
     description: 'Fragrant leafy coriander bunches plucked early morning.',
     origin: 'Pune Peri-Urban Growers',
     isOrganic: true
@@ -109,6 +137,9 @@ export const INITIAL_INVENTORY: InventoryItem[] = [
   {
     id: 'veg-9',
     name: 'English Cucumber',
+    regionalName: 'Kheera (खीरा) • Kheera (ਖੀਰਾ)',
+    hindiName: 'Kheera (खीरा)',
+    punjabiName: 'Kheera (ਖੀਰਾ)',
     category: 'Daily Essentials',
     pricePerUnit: 40,
     unitType: 'kg',

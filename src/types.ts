@@ -34,6 +34,11 @@ export interface InventoryItem {
   description: string;
   origin: string;
   isOrganic?: boolean;
+  isFavorite?: boolean; // Starred favorite item for 1-click quick access
+  regionalName?: string; // Combined Hindi & Punjabi name for display
+  hindiName?: string; // Hindi (Devanagari) name (e.g. Tamatar / टमाटर)
+  punjabiName?: string; // Punjabi (Gurmukhi) name (e.g. Tamatar / ਟਮਾਟਰ)
+  minStockAlert?: number; // Low stock alert threshold
 }
 
 export interface CartItem {
@@ -113,5 +118,26 @@ export interface ProductOffer {
   startDate: string;
   endDate: string;
   isActive: boolean;
+}
+
+export interface ExpenseItem {
+  id: string;
+  title: string;
+  category: 'Wholesale Purchase' | 'Rent & Utilities' | 'Delivery & Logistics' | 'Packaging' | 'Wages & Staff' | 'Other';
+  amount: number;
+  date: string;
+  paymentMethod: 'UPI' | 'Cash' | 'Bank Transfer' | 'Credit';
+  notes?: string;
+}
+
+export interface CampaignTriggerConfig {
+  vipMinOrders: number;
+  dormantDays: number;
+  vipCouponCode: string;
+  vipDiscount: string;
+  dormantCouponCode: string;
+  dormantDiscount: string;
+  welcomeCouponCode: string;
+  welcomeDiscount: string;
 }
 

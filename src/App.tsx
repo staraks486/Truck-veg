@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { CheckCircle2, CheckCircle, XCircle, Receipt, X, Bell } from 'lucide-react';
 import { UserRole, InventoryItem, CartItem, Order, CustomerSession, OrderItem } from './types';
 import {
   getStoredInventory,
@@ -60,21 +61,297 @@ export default function App() {
     };
   }, []);
 
-  // Update active receipt when orders update in realtime
+  // Track previous order statuses to trigger real-time toast notifications
+  const prevOrdersStatusRef = useRef<Record<string, Order['status']>>({});
+  const knownShopkeeperOrdersRef = useRef<Set<string>>(new Set());
+
+  const showCustomerOrderStatusToast = (order: Order, newStatus: 'approved' | 'rejected' | 'cancelled') => {
+    if (newStatus === 'approved') {
+      toast.custom(
+        (t) => (
+          <div className="bg-slate-900 border-2 border-emerald-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                  <CheckCircle2 className="w-6 h-6 animate-pulse text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950">
+                      Order Approved
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono font-bold">#{order.id.slice(-6)}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-0.5">
+                    Your order is ready for payment!
+                  </h4>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+              The shopkeeper approved your order ({order.items.length} items • <strong className="text-emerald-400 font-bold">₹{order.grandTotal.toFixed(2)}</strong>). Click below to view your digital bill and complete payment.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  toast.dismiss(t);
+                  setActiveReceiptOrder(order);
+                }}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/50 active:scale-95 cursor-pointer"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>View Bill & Pay Now</span>
+              </button>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 12000, position: 'top-center' }
+      );
+    } else if (newStatus === 'rejected') {
+      toast.custom(
+        (t) => (
+          <div className="bg-slate-900 border-2 border-rose-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                  <XCircle className="w-6 h-6 text-rose-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500 text-white">
+                      Order Declined
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono font-bold">#{order.id.slice(-6)}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-0.5">
+                    Order declined by store
+                  </h4>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 leading-relaxed bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 space-y-1">
+              <p>Your order <span className="font-mono text-slate-200 font-bold">#{order.id.slice(-6)}</span> was declined by the shopkeeper.</p>
+              {order.rejectionReason && (
+                <p className="font-medium text-rose-300 bg-rose-950/60 border border-rose-900/60 p-2 rounded-lg text-[11px] mt-1">
+                  Reason: "{order.rejectionReason}"
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  toast.dismiss(t);
+                  setActiveReceiptOrder(order);
+                }}
+                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-rose-950/50 active:scale-95 cursor-pointer"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>View Details</span>
+              </button>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 12000, position: 'top-center' }
+      );
+    } else if (newStatus === 'cancelled') {
+      toast.custom(
+        (t) => (
+          <div className="bg-slate-900 border-2 border-rose-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
+                  <XCircle className="w-6 h-6 text-rose-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-600 text-white">
+                      Order Cancelled
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono font-bold">#{order.id.slice(-6)}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-0.5">
+                    Order #{order.id.slice(-6)} has been cancelled
+                  </h4>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 leading-relaxed bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 space-y-1">
+              <p>Order <span className="font-mono text-slate-200 font-bold">#{order.id.slice(-6)}</span> was cancelled.</p>
+              {(order.cancellationReason || order.rejectionReason) && (
+                <p className="font-medium text-rose-300 bg-rose-950/60 border border-rose-900/60 p-2 rounded-lg text-[11px] mt-1">
+                  Reason: "{order.cancellationReason || order.rejectionReason}"
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  toast.dismiss(t);
+                  setActiveReceiptOrder(order);
+                }}
+                className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>View Details</span>
+              </button>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 8000, position: 'top-center' }
+      );
+    }
+  };
+
+  // Inspect order status transitions and new live orders
+  useEffect(() => {
+    if (role === 'customer') {
+      orders.forEach((order) => {
+        const prevStatus = prevOrdersStatusRef.current[order.id];
+        if (prevStatus !== undefined && prevStatus !== order.status) {
+          if (order.status === 'approved' || order.status === 'rejected' || order.status === 'cancelled') {
+            const matchesCustomerPhone = !customerSession.phone || order.customerPhone === customerSession.phone;
+            if (matchesCustomerPhone) {
+              if (soundEnabled) {
+                if (order.status === 'approved') playChimeSound('order_approved');
+                else if (order.status === 'rejected' || order.status === 'cancelled') playChimeSound('order_cancelled');
+              }
+              showCustomerOrderStatusToast(order, order.status);
+            }
+          }
+        }
+        prevOrdersStatusRef.current[order.id] = order.status;
+      });
+    } else if (role === 'shopkeeper') {
+      // Check for newly arrived live orders for shopkeeper
+      orders.forEach((order) => {
+        if (!knownShopkeeperOrdersRef.current.has(order.id)) {
+          knownShopkeeperOrdersRef.current.add(order.id);
+          // If a new live order is received in pending status
+          if (order.status === 'sent_to_shopkeeper') {
+            if (soundEnabled) {
+              playChimeSound('new_order_tune');
+            }
+            toast.custom(
+              (t) => (
+                <div className="bg-slate-900 border-2 border-amber-400 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                        <Bell className="w-6 h-6 animate-bounce text-amber-400" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400 text-slate-950">
+                            🔔 New Live Order
+                          </span>
+                          <span className="text-xs text-slate-400 font-mono font-bold">#{order.id.slice(-6)}</span>
+                        </div>
+                        <h4 className="text-sm font-bold text-white mt-0.5">
+                          New order from {order.customerName}
+                        </h4>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toast.dismiss(t)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                      aria-label="Close notification"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-slate-300 leading-relaxed bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-slate-200">{order.items.length} item(s) • {order.fulfillmentType === 'home_delivery' ? 'Home Delivery' : 'Store Pickup'}</p>
+                      <p className="text-[11px] text-slate-400">Phone: {order.customerPhone}</p>
+                    </div>
+                    <span className="text-sm font-mono font-black text-emerald-400">₹{order.grandTotal.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      onClick={() => {
+                        toast.dismiss(t);
+                        handleUpdateOrderStatus(order.id, 'approved');
+                        if (soundEnabled) playChimeSound('order_approved');
+                        toast.success(`✅ Order #${order.id.slice(-6)} Accepted! Customer notified.`, { position: 'top-center' });
+                      }}
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+                    >
+                      <CheckCircle className="w-4 h-4 text-slate-950" />
+                      <span>Accept Order</span>
+                    </button>
+                    <button
+                      onClick={() => toast.dismiss(t)}
+                      className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-xl transition-colors cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              ),
+              { duration: 15000, position: 'top-center' }
+            );
+          }
+        }
+      });
+    }
+  }, [orders, role, customerSession.phone, soundEnabled]);
+
+  // Sync active receipt modal order state in realtime
   useEffect(() => {
     if (activeReceiptOrder) {
       const updated = orders.find((o) => o.id === activeReceiptOrder.id);
       if (updated) {
-        if (updated.status !== activeReceiptOrder.status) {
-          if (soundEnabled) {
-            if (updated.status === 'approved') playChimeSound('order_approved');
-            else if (updated.status === 'rejected') playChimeSound('order_rejected');
-          }
-        }
         setActiveReceiptOrder(updated);
       }
     }
-  }, [orders, activeReceiptOrder, soundEnabled]);
+  }, [orders, activeReceiptOrder]);
 
   // Cart operations
   const handleAddToCart = (newItem: CartItem) => {
@@ -248,8 +525,8 @@ export default function App() {
   const handleUpdateOrderStatus = (
     orderId: string,
     status: Order['status'],
-    rejectionReason?: string,
     paymentMethod?: 'UPI' | 'Cash' | 'Card',
+    rejectionReason?: string,
     cancellationReason?: string,
     cancelledBy?: 'customer' | 'shopkeeper'
   ) => {
@@ -268,10 +545,10 @@ export default function App() {
         return {
           ...order,
           status,
+          paymentMethod: paymentMethod || order.paymentMethod,
           rejectionReason: rejectionReason || order.rejectionReason,
           cancellationReason: isCancel ? (cancellationReason || rejectionReason || 'Cancelled by user') : order.cancellationReason,
           cancelledBy: isCancel ? (cancelledBy || 'customer') : order.cancelledBy,
-          paymentMethod: paymentMethod || order.paymentMethod,
           updatedAt: new Date().toISOString()
         };
       }
@@ -301,7 +578,8 @@ export default function App() {
     }
 
     if (soundEnabled) {
-      if (status === 'cancelled') playChimeSound('click');
+      if (status === 'approved' || status === 'paid') playChimeSound('order_approved');
+      else if (status === 'cancelled' || status === 'rejected') playChimeSound('order_cancelled');
     }
   };
 
@@ -311,14 +589,64 @@ export default function App() {
     updatedItems: OrderItem[],
     shopkeeperNote?: string
   ) => {
+    const existingOrder = orders.find(o => o.id === orderId);
+    if (existingOrder && (existingOrder.status === 'sent_to_shopkeeper' || existingOrder.status === 'approved')) {
+      const itemQtyMap: Record<string, { oldQty: number; newQty: number; unitType: string }> = {};
+      
+      existingOrder.items.forEach(item => {
+        itemQtyMap[item.itemId] = {
+          oldQty: item.quantityOrWeight,
+          newQty: 0,
+          unitType: item.unitType
+        };
+      });
+
+      updatedItems.forEach(item => {
+        if (!itemQtyMap[item.itemId]) {
+          itemQtyMap[item.itemId] = { oldQty: 0, newQty: item.quantityOrWeight, unitType: item.unitType };
+        } else {
+          itemQtyMap[item.itemId].newQty = item.quantityOrWeight;
+        }
+      });
+
+      let invChanged = false;
+      const updatedInventory = inventory.map(invItem => {
+        const diffData = itemQtyMap[invItem.id];
+        if (diffData) {
+          const isKg = invItem.unitType === 'kg';
+          const oldUnits = isKg ? diffData.oldQty / 1000 : diffData.oldQty;
+          const newUnits = isKg ? diffData.newQty / 1000 : diffData.newQty;
+          const diff = newUnits - oldUnits; // positive = increased weight, deduct more stock
+          if (diff !== 0) {
+            invChanged = true;
+            const newStock = Math.max(0, Number((invItem.stockQuantity - diff).toFixed(2)));
+            return {
+              ...invItem,
+              stockQuantity: newStock,
+              inStock: newStock > 0
+            };
+          }
+        }
+        return invItem;
+      });
+
+      if (invChanged) {
+        setInventory(updatedInventory);
+        saveStoredInventory(updatedInventory);
+      }
+    }
+
     const computedSubtotal = updatedItems.reduce((acc, curr) => acc + curr.totalPrice, 0);
     const updated = orders.map((order) => {
       if (order.id === orderId) {
+        const deliveryFee = order.deliveryFee || 0;
+        const discountAmount = order.discountAmount || 0;
+        const finalGrandTotal = Math.max(0, computedSubtotal - discountAmount + deliveryFee);
         return {
           ...order,
           items: updatedItems,
           subtotal: computedSubtotal,
-          grandTotal: computedSubtotal,
+          grandTotal: finalGrandTotal,
           shopkeeperNote,
           updatedAt: new Date().toISOString()
         };
@@ -385,7 +713,7 @@ export default function App() {
   const activeCustomerOrder = orders.find(
     (o) => (o.status === 'sent_to_shopkeeper' || o.status === 'approved') &&
            (customerSession.phone ? o.customerPhone === customerSession.phone : true)
-  ) || (customerSession.phone ? orders.find((o) => o.customerPhone === customerSession.phone) : null) || null;
+  ) || null;
 
   if (currentView === 'auth') {
     return (
@@ -450,9 +778,7 @@ export default function App() {
           <ShopkeeperDashboard
             orders={orders}
             inventory={inventory}
-            onUpdateOrderStatus={(id, status, reason) =>
-              handleUpdateOrderStatus(id, status, reason)
-            }
+            onUpdateOrderStatus={handleUpdateOrderStatus}
             onUpdateOrderWeights={handleUpdateOrderWeights}
             onSaveInventoryItem={handleSaveInventoryItem}
             onDeleteInventoryItem={handleDeleteInventoryItem}
@@ -514,10 +840,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div>
             <p className="font-bold text-slate-200">
-              FreshSelf Pay • QR Produce Self-Checkout System
+              App design by Arvind Kumar Shukla
             </p>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Empowering local vegetable stores with instant weigh-and-pay verification.
+              Farmer's Gate • Fresh Produce Self-Checkout System
             </p>
           </div>
           <div className="text-slate-500 font-mono text-[11px]">

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CartItem, CustomerSession, Order } from '../types';
-import { X, Trash2, ShoppingBag, Send, ArrowRight, User, Phone, CheckCircle2, Clock, MessageSquare, Truck, MapPin, Store, AlertTriangle, Tag, Sparkles, Gift, Check, Zap, ShieldCheck, Receipt, Flame, ChevronRight, XCircle } from 'lucide-react';
+import { X, Trash2, ShoppingBag, Send, ArrowRight, User, Phone, CheckCircle2, Clock, MessageSquare, Truck, MapPin, Store, AlertTriangle, Tag, Sparkles, Gift, Check, Zap, ShieldCheck, Receipt, Flame, ChevronRight, XCircle, Percent, DollarSign } from 'lucide-react';
 import { formatCurrency, formatWeightOrUnits } from '../utils/storageManager';
+import { AppliedPromo, PRESET_PROMO_CODES, parsePromoCode, calculatePromoDiscount } from '../utils/promoManager';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -27,12 +28,6 @@ interface CartDrawerProps {
   onCancelOrder?: (orderId: string, reason: string) => void;
 }
 
-const PRESET_OFFERS = [
-  { code: 'FRESH10', label: '10% OFF Fresh Produce', icon: '🏷️', type: 'percent', val: 10, minSpend: 0 },
-  { code: 'WELCOME50', label: '₹50 OFF (Min ₹250)', icon: '🎁', type: 'flat', val: 50, minSpend: 250 },
-  { code: 'ORGANIC20', label: '₹20 OFF Organic Veggies', icon: '🥦', type: 'flat', val: 20, minSpend: 100 },
-];
-
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   isOpen,
   onClose,
@@ -50,9 +45,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [fulfillmentType, setFulfillmentType] = useState<'store_pickup' | 'home_delivery'>('store_pickup');
   const [deliveryAddress, setDeliveryAddress] = useState(customerSession.deliveryAddress || '');
 
-  // Promo Code & Offers State
+  // Promo Code & Offers State (Supports Percentage & Flat Rate Discounts)
   const [promoInput, setPromoInput] = useState('');
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number; label: string } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [addressError, setAddressError] = useState<string | null>(null);
 
@@ -67,8 +62,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const subtotal = cart.reduce((acc, curr) => acc + curr.calculatedPrice, 0);
   const tax = 0; // Fresh produce tax-exempt
   
-  // Recalculate promo discount if cart changes
-  const computedDiscount = appliedPromo ? Math.min(subtotal, appliedPromo.discount) : 0;
+  // Recalculate promo discount dynamically based on current cart subtotal
+  const { discount: computedDiscount, isValid: promoIsValid, errorReason: activePromoError } = calculatePromoDiscount(appliedPromo, subtotal);
   const deliveryFee = fulfillmentType === 'home_delivery' ? (subtotal >= 300 ? 0 : 30) : 0;
   const grandTotal = Math.max(0, subtotal - computedDiscount + tax + deliveryFee);
 
@@ -82,33 +77,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setPromoError(null);
 
     if (!code) {
-      setPromoError('Please enter a valid coupon code.');
+      setPromoError('Please enter a valid promo or coupon code.');
       return;
     }
 
-    if (code === 'FRESH10') {
-      const discount = Math.round(subtotal * 0.10);
-      setAppliedPromo({ code: 'FRESH10', discount, label: '10% OFF Fresh Produce' });
-      setPromoInput('');
-    } else if (code === 'WELCOME50') {
-      if (subtotal < 250) {
-        setPromoError('Cart subtotal must be at least ₹250 for WELCOME50.');
-        return;
-      }
-      setAppliedPromo({ code: 'WELCOME50', discount: 50, label: '₹50 Flat Welcome Offer' });
-      setPromoInput('');
-    } else if (code === 'ORGANIC20') {
-      if (subtotal < 100) {
-        setPromoError('Cart subtotal must be at least ₹100 for ORGANIC20.');
-        return;
-      }
-      setAppliedPromo({ code: 'ORGANIC20', discount: 20, label: '₹20 Organic Discount' });
-      setPromoInput('');
-    } else {
-      const discount = Math.min(subtotal, Math.max(10, Math.round(subtotal * 0.05)));
-      setAppliedPromo({ code, discount, label: `${code} Applied (Special Discount)` });
-      setPromoInput('');
+    const rule = parsePromoCode(code);
+    if (rule.minSpend && subtotal < rule.minSpend) {
+      setPromoError(`Cart subtotal (₹${subtotal.toFixed(0)}) must be at least ₹${rule.minSpend} to use ${code}. Add ₹${(rule.minSpend - subtotal).toFixed(0)} more items.`);
+      return;
     }
+
+    setAppliedPromo({
+      code: rule.code,
+      type: rule.type,
+      value: rule.value,
+      label: rule.label,
+      minSpend: rule.minSpend
+    });
+    setPromoInput('');
+    setPromoError(null);
   };
 
   const handleRemovePromo = () => {
@@ -359,18 +346,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="p-4 sm:p-5 bg-white border-t border-slate-200/90 space-y-3.5 overflow-y-auto max-h-[60vh] sm:max-h-none shadow-xl">
               
               {/* Offers & Coupons Card */}
-              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-lime-50 border border-emerald-200/90 p-3 rounded-2xl space-y-2 shadow-2xs">
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-lime-50 border border-emerald-200/90 p-3.5 rounded-2xl space-y-2.5 shadow-2xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-emerald-950 font-black text-xs">
                     <Tag className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span>Zepto Coupons & Savings</span>
+                    <span>Apply Promo Code & Coupons</span>
                   </div>
                   <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                 </div>
 
                 {!appliedPromo ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleApplyPromoCode();
+                      }}
+                      className="flex items-center gap-1.5"
+                    >
                       <input
                         type="text"
                         value={promoInput}
@@ -378,64 +371,93 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           setPromoInput(e.target.value);
                           if (promoError) setPromoError(null);
                         }}
-                        placeholder="Enter Code (e.g. FRESH10)"
-                        className="flex-1 px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-mono uppercase text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-600"
+                        placeholder="Enter promo code (e.g. FRESH10, 20OFF, WELCOME50)"
+                        className="flex-1 px-3 py-2 bg-white border border-emerald-300 rounded-xl text-xs font-mono uppercase text-slate-900 placeholder:text-slate-400 placeholder:font-sans outline-none focus:ring-2 focus:ring-emerald-600"
                       />
                       <button
-                        type="button"
-                        onClick={() => handleApplyPromoCode()}
-                        className="px-3.5 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs rounded-xl shadow-xs transition-all active:scale-95 shrink-0"
+                        type="submit"
+                        className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-black text-xs rounded-xl shadow-xs transition-all active:scale-95 shrink-0"
                       >
                         Apply
                       </button>
-                    </div>
+                    </form>
 
                     {promoError && (
-                      <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                      <p className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded-xl flex items-center gap-1.5 animate-fadeIn">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
                         <span>{promoError}</span>
                       </p>
                     )}
 
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                      {PRESET_OFFERS.map((offer) => (
-                        <button
-                          key={offer.code}
-                          type="button"
-                          onClick={() => handleApplyPromoCode(offer.code)}
-                          className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-xl text-[10px] font-black shrink-0 flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
-                        >
-                          <span>{offer.icon}</span>
-                          <span className="font-mono text-emerald-900">{offer.code}</span>
-                        </button>
-                      ))}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-500 block">Quick Promo Presets:</span>
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        {PRESET_PROMO_CODES.map((offer) => (
+                          <button
+                            key={offer.code}
+                            type="button"
+                            onClick={() => handleApplyPromoCode(offer.code)}
+                            className="px-2.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-xl text-[10px] font-extrabold shrink-0 flex items-center gap-1 transition-all active:scale-95 shadow-2xs group"
+                          >
+                            <span>{offer.icon || '🏷️'}</span>
+                            <span className="font-mono text-emerald-900 font-bold">{offer.code}</span>
+                            <span className={`px-1 py-0.2 rounded text-[9px] font-black ${
+                              offer.type === 'percent'
+                                ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                                : 'bg-amber-100 text-amber-900 border border-amber-200'
+                            }`}>
+                              {offer.type === 'percent' ? `${offer.value}% OFF` : `₹${offer.value} OFF`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-emerald-100/90 border border-emerald-300 p-2.5 rounded-xl flex items-center justify-between text-xs text-emerald-950">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1 bg-emerald-600 text-white rounded-lg shrink-0">
-                        <Check className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5 font-black text-emerald-900">
-                          <span className="font-mono uppercase bg-white px-1.5 py-0.5 rounded border border-emerald-300 text-[10px]">
-                            {appliedPromo.code}
-                          </span>
-                          <span>- {formatCurrency(computedDiscount)} Saved!</span>
+                  <div className="space-y-1.5">
+                    <div className="bg-emerald-100/90 border border-emerald-300 p-3 rounded-xl flex items-center justify-between text-xs text-emerald-950 shadow-xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 bg-emerald-700 text-white rounded-xl shrink-0 shadow-2xs">
+                          {appliedPromo.type === 'percent' ? (
+                            <Percent className="w-4 h-4" />
+                          ) : (
+                            <Check className="w-4 h-4" />
+                          )}
                         </div>
-                        <p className="text-[10px] text-emerald-800 font-medium">{appliedPromo.label}</p>
+                        <div>
+                          <div className="flex items-center gap-2 font-black text-emerald-950">
+                            <span className="font-mono uppercase bg-white px-2 py-0.5 rounded-md border border-emerald-300 text-xs text-emerald-900">
+                              {appliedPromo.code}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-200/80 text-[10px] font-black uppercase text-emerald-900">
+                              {appliedPromo.type === 'percent' ? `${appliedPromo.value}% Percentage Discount` : `₹${appliedPromo.value} Flat Discount`}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-900 font-extrabold mt-1 flex items-center gap-1">
+                            <span>{appliedPromo.label}</span>
+                            <strong className="text-emerald-950 bg-emerald-300/80 px-1.5 py-0.2 rounded font-mono font-black">
+                              Saved {formatCurrency(computedDiscount)}
+                            </strong>
+                          </p>
+                        </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={handleRemovePromo}
+                        className="p-1.5 text-emerald-800 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-emerald-200 hover:border-rose-300"
+                        title="Remove promo code"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleRemovePromo}
-                      className="p-1 text-emerald-700 hover:text-rose-600 hover:bg-emerald-200/50 rounded-lg transition-colors"
-                      title="Remove coupon discount"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {activePromoError && (
+                      <p className="text-[11px] font-bold text-amber-900 bg-amber-100/90 border border-amber-300 p-2 rounded-xl flex items-center gap-1.5 animate-fadeIn">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+                        <span>{activePromoError}</span>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
