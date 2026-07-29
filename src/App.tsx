@@ -43,6 +43,7 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeReceiptOrder, setActiveReceiptOrder] = useState<Order | null>(null);
   const [isOutdatedVersion, setIsOutdatedVersion] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
 
   // Load initial data & set up realtime cross-tab / cross-role synchronization
   useEffect(() => {
@@ -53,87 +54,181 @@ export default function App() {
       setCart(getStoredCart());
     };
 
-    const syncWithServer = async () => {
-      try {
-        const response = await fetch('/api/sync');
-        if (!response.ok) return;
-        const serverData = await response.json();
-        
-        // Detect if client is running an outdated version that might cause data schema conflicts
-        let isOutdated = false;
-        for (const key of Object.keys(serverData)) {
-          const item = serverData[key];
-          if (item && typeof item === 'object' && 'schemaVersion' in item) {
-            if (item.schemaVersion > SCHEMA_VERSION) {
-              isOutdated = true;
-            }
+    const syncTypeMap: Record<string, { localKey: string; setStateFn?: (data: any) => void }> = {
+      inventory: { localKey: 'qr_veg_inventory_v1', setStateFn: setInventory },
+      orders: { localKey: 'qr_veg_orders_v1', setStateFn: setOrders },
+      customers: { localKey: 'qr_veg_customer_records_v1' },
+      storeConfig: { localKey: 'qr_veg_store_config_v1' },
+      offers: { localKey: 'qr_veg_offers_v1' },
+      expenses: { localKey: 'qr_veg_expenses_v1' },
+      campaignConfig: { localKey: 'qr_veg_campaign_config_v1' },
+      cart: { localKey: 'qr_veg_cart_v1', setStateFn: setCart }
+    };
+
+    const checkOutdatedVersion = (serverData: any) => {
+      let isOutdated = false;
+      for (const key of Object.keys(serverData)) {
+        const item = serverData[key];
+        if (item && typeof item === 'object' && 'schemaVersion' in item) {
+          if (item.schemaVersion > SCHEMA_VERSION) {
+            isOutdated = true;
           }
         }
-        setIsOutdatedVersion(isOutdated);
-        
-        let changed = false;
+      }
+      setIsOutdatedVersion(isOutdated);
+    };
 
-        const processSyncItem = (
-          serverType: string,
-          localKey: string,
-          setStateFn?: (data: any) => void
-        ) => {
-          const item = serverData[serverType];
-          if (!item) return;
+    const handleServerSyncData = (serverData: any) => {
+      let changed = false;
+      checkOutdatedVersion(serverData);
 
-          // Support backward compatibility if server store doesn't have updatedAt wrapped format
-          const serverTime = typeof item === 'object' && item !== null && 'updatedAt' in item ? item.updatedAt : 0;
-          const serverDataVal = typeof item === 'object' && item !== null && 'data' in item ? item.data : item;
+      for (const serverType of Object.keys(syncTypeMap)) {
+        const item = serverData[serverType];
+        if (!item) continue;
 
-          if (serverDataVal === null || serverDataVal === undefined) return;
+        const serverTime = typeof item === 'object' && item !== null && 'updatedAt' in item ? item.updatedAt : 0;
+        const serverDataVal = typeof item === 'object' && item !== null && 'data' in item ? item.data : item;
 
-          // Ensure array structures are actually arrays
-          const arrayKeys = ['inventory', 'orders', 'customers', 'cart', 'offers', 'expenses'];
-          if (arrayKeys.includes(serverType) && !Array.isArray(serverDataVal)) {
-            console.warn(`Sync warning: expected array for ${serverType} but got`, serverDataVal);
-            return;
-          }
+        if (serverDataVal === null || serverDataVal === undefined) continue;
 
-          const localTime = getLocalTimestamp(serverType);
+        const arrayKeys = ['inventory', 'orders', 'customers', 'cart', 'offers', 'expenses'];
+        if (arrayKeys.includes(serverType) && !Array.isArray(serverDataVal)) {
+          continue;
+        }
 
-          // We only update if the server's update is strictly newer than our local change time,
-          // or if we have no local timestamp yet.
-          if (serverTime > localTime || localTime === 0) {
-            const rawLocal = localStorage.getItem(localKey);
-            const serverStr = JSON.stringify(serverDataVal);
-            if (rawLocal !== serverStr) {
-              localStorage.setItem(localKey, serverStr);
-              setLocalTimestamp(serverType, serverTime);
-              if (setStateFn) {
-                setStateFn(serverDataVal);
-              }
-              changed = true;
+        const localTime = getLocalTimestamp(serverType);
+
+        if (serverTime > localTime || localTime === 0) {
+          const { localKey, setStateFn } = syncTypeMap[serverType];
+          const rawLocal = localStorage.getItem(localKey);
+          const serverStr = JSON.stringify(serverDataVal);
+          if (rawLocal !== serverStr) {
+            localStorage.setItem(localKey, serverStr);
+            setLocalTimestamp(serverType, serverTime);
+            if (setStateFn) {
+              setStateFn(serverDataVal);
             }
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
+        loadAllData();
+      }
+    };
+
+    const handleSingleItemUpdate = (serverType: string, serverDataVal: any, serverTime: number) => {
+      if (serverType && serverType in syncTypeMap) {
+        if (serverDataVal === null || serverDataVal === undefined) return;
+
+        const arrayKeys = ['inventory', 'orders', 'customers', 'cart', 'offers', 'expenses'];
+        if (arrayKeys.includes(serverType) && !Array.isArray(serverDataVal)) {
+          return;
+        }
+
+        const localTime = getLocalTimestamp(serverType);
+
+        if (serverTime > localTime || localTime === 0) {
+          const { localKey, setStateFn } = syncTypeMap[serverType];
+          const rawLocal = localStorage.getItem(localKey);
+          const serverStr = JSON.stringify(serverDataVal);
+          if (rawLocal !== serverStr) {
+            localStorage.setItem(localKey, serverStr);
+            setLocalTimestamp(serverType, serverTime);
+            if (setStateFn) {
+              setStateFn(serverDataVal);
+            }
+            loadAllData();
+          }
+        }
+      }
+    };
+
+    // EventSource (SSE) setup for instantaneous sub-second live updates
+    let eventSource: EventSource | null = null;
+    let sseActive = false;
+
+    const setupSSE = () => {
+      try {
+        if (eventSource) {
+          eventSource.close();
+        }
+        
+        eventSource = new EventSource('/api/sync/stream');
+        
+        eventSource.onopen = () => {
+          sseActive = true;
+          setSyncStatus('synced');
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            setSyncStatus('syncing');
+            const message = JSON.parse(event.data);
+            if (message.type === 'init') {
+              handleServerSyncData(message.store);
+            } else {
+              handleSingleItemUpdate(message.type, message.data, message.updatedAt);
+            }
+            setTimeout(() => setSyncStatus('synced'), 400);
+          } catch (e) {
+            console.error('Failed to parse SSE live message:', e);
           }
         };
 
-        processSyncItem('inventory', 'qr_veg_inventory_v1', setInventory);
-        processSyncItem('orders', 'qr_veg_orders_v1', setOrders);
-        processSyncItem('customers', 'qr_veg_customer_records_v1');
-        processSyncItem('storeConfig', 'qr_veg_store_config_v1');
-        processSyncItem('offers', 'qr_veg_offers_v1');
-        processSyncItem('expenses', 'qr_veg_expenses_v1');
-        processSyncItem('campaignConfig', 'qr_veg_campaign_config_v1');
-        processSyncItem('cart', 'qr_veg_cart_v1', setCart);
+        eventSource.onerror = () => {
+          sseActive = false;
+          setSyncStatus('error');
+          if (eventSource) {
+            eventSource.close();
+          }
+        };
+      } catch (err) {
+        console.error('Error starting EventSource stream:', err);
+        sseActive = false;
+        setSyncStatus('error');
+      }
+    };
 
-        if (changed) {
-          loadAllData();
+    const syncWithServerFallback = async () => {
+      // If SSE is active and working, we can bypass high-frequency polling to save bandwidth/battery
+      if (sseActive) {
+        return;
+      }
+
+      try {
+        setSyncStatus('syncing');
+        const response = await fetch('/api/sync');
+        if (!response.ok) {
+          setSyncStatus('error');
+          return;
         }
+        const serverData = await response.json();
+        handleServerSyncData(serverData);
+        setSyncStatus('synced');
       } catch (e) {
-        console.error('Failed to sync with server:', e);
+        console.error('Failed fallback HTTP sync:', e);
+        setSyncStatus('error');
       }
     };
 
     loadAllData();
-    syncWithServer(); // Sync immediately on mount
+    setupSSE();
+    syncWithServerFallback(); // Sync immediately on mount
 
-    // Poll server every 2 seconds to keep multiple devices (Desktop & Mobile) in perfect sync
-    const syncInterval = setInterval(syncWithServer, 2000);
+    // Fallback polling loop (runs every 3.5 seconds to cover connectivity drops)
+    const syncInterval = setInterval(syncWithServerFallback, 3500);
+
+    // Re-initialize SSE if we detect document visibility or network state changes
+    const handleFocusOrOnline = () => {
+      if (!sseActive) {
+        setupSSE();
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrOnline);
+    window.addEventListener('online', handleFocusOrOnline);
 
     const handleCustomStateChange = () => {
       loadAllData();
@@ -143,7 +238,12 @@ export default function App() {
     window.addEventListener('storage', handleCustomStateChange);
 
     return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
       clearInterval(syncInterval);
+      window.removeEventListener('focus', handleFocusOrOnline);
+      window.removeEventListener('online', handleFocusOrOnline);
       window.removeEventListener('app-state-change', handleCustomStateChange);
       window.removeEventListener('storage', handleCustomStateChange);
     };
@@ -625,7 +725,9 @@ export default function App() {
     paymentMethod?: 'UPI' | 'Cash' | 'Card',
     rejectionReason?: string,
     cancellationReason?: string,
-    cancelledBy?: 'customer' | 'shopkeeper'
+    cancelledBy?: 'customer' | 'shopkeeper',
+    paymentReminderSent?: boolean,
+    paymentReminderMessage?: string
   ) => {
     let orderToRestore: Order | undefined;
 
@@ -633,6 +735,7 @@ export default function App() {
       if (order.id === orderId) {
         const isCancel = status === 'cancelled';
         const isReject = status === 'rejected';
+        const isPaidOrVerifying = status === 'paid' || status === 'payment_pending_confirmation';
         
         // If order is transitioning to cancelled/rejected from an active state, restore stock
         if ((isCancel || isReject) && order.status !== 'cancelled' && order.status !== 'rejected') {
@@ -646,6 +749,9 @@ export default function App() {
           rejectionReason: rejectionReason || order.rejectionReason,
           cancellationReason: isCancel ? (cancellationReason || rejectionReason || 'Cancelled by user') : order.cancellationReason,
           cancelledBy: isCancel ? (cancelledBy || 'customer') : order.cancelledBy,
+          paymentReminderSent: isPaidOrVerifying ? false : (paymentReminderSent !== undefined ? paymentReminderSent : order.paymentReminderSent),
+          paymentReminderMessage: isPaidOrVerifying ? undefined : (paymentReminderMessage !== undefined ? paymentReminderMessage : order.paymentReminderMessage),
+          paymentReminderSentAt: isPaidOrVerifying ? undefined : (paymentReminderSent ? new Date().toISOString() : order.paymentReminderSentAt),
           updatedAt: new Date().toISOString()
         };
       }
@@ -867,6 +973,7 @@ export default function App() {
             setCurrentView('auth');
           }}
           orders={orders}
+          syncStatus={syncStatus}
         />
       )}
 
@@ -892,6 +999,7 @@ export default function App() {
             onLogout={() => setCurrentView('auth')}
             orders={orders}
             onSubmitOrder={handleSubmitOrder}
+            syncStatus={syncStatus}
           />
         ) : (
           <ShopkeeperDashboard

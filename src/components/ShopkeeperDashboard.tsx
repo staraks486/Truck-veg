@@ -42,6 +42,8 @@ import {
   Truck,
   Tag,
   Receipt,
+  Bell,
+  BellRing,
   ArrowRight,
   ArrowLeft,
   X,
@@ -82,7 +84,9 @@ interface ShopkeeperDashboardProps {
     paymentMethod?: 'UPI' | 'Cash' | 'Card',
     rejectionReason?: string,
     cancellationReason?: string,
-    cancelledBy?: 'customer' | 'shopkeeper'
+    cancelledBy?: 'customer' | 'shopkeeper',
+    paymentReminderSent?: boolean,
+    paymentReminderMessage?: string
   ) => void;
   onUpdateOrderWeights: (orderId: string, updatedItems: OrderItem[], shopkeeperNote?: string) => void;
   onSaveInventoryItem: (item: InventoryItem) => void;
@@ -426,7 +430,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   };
 
   const handleExportSalesReportCSV = () => {
-    const completed = orders.filter((o) => o.status === 'paid' || o.status === 'approved');
+    const completed = orders.filter((o) => o.status === 'paid' || o.status === 'approved' || o.status === 'payment_pending_confirmation');
     if (completed.length === 0) {
       toast('No completed sales records available to export.');
       return;
@@ -446,7 +450,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
 
   // Compute analytics metrics
   const pendingOrders = orders.filter((o) => o.status === 'sent_to_shopkeeper');
-  const approvedOrders = orders.filter((o) => o.status === 'approved' || o.status === 'paid');
+  const approvedOrders = orders.filter((o) => o.status === 'approved' || o.status === 'paid' || o.status === 'payment_pending_confirmation');
   const todayTotalSales = approvedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
   const totalStockItems = safeInventory.length;
   const outOfStockItems = safeInventory.filter((i) => !i.inStock || i.stockQuantity <= 0).length;
@@ -786,6 +790,13 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     toast.success(`✅ Live Order #${order.id.slice(-6)} Accepted! Customer notified.`, {
       position: 'top-center'
     });
+  };
+
+  const handleSendReminder = (order: Order, customMessage?: string) => {
+    const defaultMsg = `Please complete your payment of ₹${order.grandTotal.toFixed(2)} to finalize your order. You can pay via UPI QR, Cash or Card.`;
+    const finalMsg = customMessage || defaultMsg;
+    onUpdateOrderStatus(order.id, 'approved', undefined, undefined, undefined, undefined, true, finalMsg);
+    toast.success(`🔔 Sent payment reminder to ${order.customerName}!`);
   };
 
   return (
@@ -1394,6 +1405,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                             <h4 className="font-black text-sm text-slate-900">{order.customerName}</h4>
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
                               order.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                              order.status === 'payment_pending_confirmation' ? 'bg-amber-100 text-amber-800 border border-amber-400 animate-pulse font-black' :
                               order.status === 'approved' ? 'bg-teal-100 text-teal-800' :
                               order.status === 'cancelled' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
                               order.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
@@ -1401,6 +1413,8 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                             }`}>
                               {order.status === 'sent_to_shopkeeper'
                                 ? 'Pending Approval'
+                                : order.status === 'payment_pending_confirmation'
+                                ? 'Verify Payment'
                                 : order.status === 'cancelled'
                                 ? 'Cancelled by Customer'
                                 : order.status}
@@ -1655,6 +1669,75 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                             <div className="px-3 py-1.5 bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-xs rounded-xl flex items-center gap-1.5">
                               <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                               <span>Paid via {order.paymentMethod || 'Cash'}</span>
+                            </div>
+                          ) : order.status === 'payment_pending_confirmation' ? (
+                            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-amber-50 p-2 rounded-xl border border-amber-300 w-full">
+                              <div className="text-[11px] font-black text-amber-950 px-1 flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                                <span>Paid via {order.paymentMethod || 'UPI'} - Needs verification</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkAsPaid(order, order.paymentMethod || 'UPI')}
+                                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                                  title="Click to confirm payment received"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                  <span>Confirm Payment</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onUpdateOrderStatus(order.id, 'approved')}
+                                  className="px-2 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl border border-rose-200 transition-colors cursor-pointer"
+                                  title="Reject payment and let customer retry"
+                                >
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : order.status === 'approved' ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleSendReminder(order)}
+                                className={`px-3 py-2 font-black text-xs rounded-xl shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95 ${
+                                  order.paymentReminderSent
+                                    ? 'bg-rose-100 text-rose-800 border border-rose-300 hover:bg-rose-200 animate-pulse'
+                                    : 'bg-rose-600 hover:bg-rose-700 text-white'
+                                }`}
+                                title="Send Payment Reminder notification to customer"
+                              >
+                                <BellRing className="w-3.5 h-3.5 text-current animate-bounce" />
+                                <span>{order.paymentReminderSent ? 'Resend Reminder' : 'Send Reminder'}</span>
+                              </button>
+                              
+                              <div className="h-6 w-[1px] bg-slate-300 mx-0.5 hidden md:block"></div>
+                              
+                              <button
+                                type="button"
+                                onClick={() => handleMarkAsPaid(order, 'Cash')}
+                                className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-extrabold text-[11px] rounded-xl border border-emerald-300 transition-colors cursor-pointer"
+                                title="Mark Paid via Cash"
+                              >
+                                <span>Paid Cash</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMarkAsPaid(order, 'UPI')}
+                                className="px-2 py-2 bg-teal-50 hover:bg-teal-100 text-teal-900 font-extrabold text-[11px] rounded-xl border border-teal-200 transition-colors cursor-pointer"
+                                title="Mark Paid via UPI"
+                              >
+                                <span>UPI</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleMarkAsPaid(order, 'Card')}
+                                className="px-2 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-extrabold text-[11px] rounded-xl border border-indigo-200 transition-colors cursor-pointer"
+                                title="Mark Paid via Card"
+                              >
+                                <span>Card</span>
+                              </button>
                             </div>
                           ) : order.status !== 'cancelled' && order.status !== 'rejected' && (
                             <div className="flex items-center gap-1">

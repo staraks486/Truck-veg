@@ -48,7 +48,7 @@ export interface CartItem {
   calculatedPrice: number;
 }
 
-export type OrderStatus = 'sent_to_shopkeeper' | 'reviewed' | 'approved' | 'rejected' | 'paid' | 'cancelled';
+export type OrderStatus = 'sent_to_shopkeeper' | 'reviewed' | 'approved' | 'rejected' | 'paid' | 'cancelled' | 'payment_pending_confirmation';
 
 export interface OrderItem {
   itemId: string;
@@ -82,6 +82,9 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   paymentMethod?: 'UPI' | 'Cash' | 'Card';
+  paymentReminderSent?: boolean;
+  paymentReminderMessage?: string;
+  paymentReminderSentAt?: string;
 }
 
 export interface CustomerSession {

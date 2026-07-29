@@ -22,6 +22,7 @@ interface CustomerCatalogProps {
   onCancelOrder?: (orderId: string, reason: string) => void;
   onLogout?: () => void;
   orders?: Order[];
+  syncStatus?: 'synced' | 'syncing' | 'error';
   onSubmitOrder: (
     customerName: string,
     customerPhone: string,
@@ -56,7 +57,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
   onSubmitOrder,
   onOpenLogin,
   activeOrder,
-  onViewReceipt
+  onViewReceipt,
+  syncStatus = 'synced'
 }) => {
   const safeInventory = Array.isArray(inventory) ? inventory : [];
 
@@ -259,6 +261,24 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
               <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">What would you like to buy today?</p>
             </div>
             <div className="flex items-center gap-2.5">
+              {/* Advanced Real-time Sync Status Indicator */}
+              {syncStatus === 'syncing' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-600 transition-all select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                  <span className="hidden sm:inline">Live</span> Syncing
+                </span>
+              ) : syncStatus === 'error' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-[10px] font-bold text-rose-600 transition-all select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping shrink-0" />
+                  Offline
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-600 transition-all select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="hidden sm:inline">Real-time</span> Synced
+                </span>
+              )}
+
               {/* Notification Bell Icon */}
               <div className="relative">
                 <button
@@ -366,12 +386,16 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                     <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                       activeOrder.status === 'approved'
                         ? 'bg-emerald-500 text-slate-950'
+                        : activeOrder.status === 'payment_pending_confirmation'
+                        ? 'bg-amber-500 text-slate-950'
                         : activeOrder.status === 'rejected'
                         ? 'bg-rose-500 text-white'
                         : 'bg-amber-500 text-slate-950'
                     }`}>
                       {activeOrder.status === 'approved'
                         ? 'Order Approved'
+                        : activeOrder.status === 'payment_pending_confirmation'
+                        ? 'Payment Sent'
                         : activeOrder.status === 'rejected'
                         ? 'Order Declined'
                         : 'Reviewing Order'}
@@ -381,6 +405,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                   <p className="text-xs font-semibold text-slate-200 mt-1">
                     {activeOrder.status === 'approved'
                       ? `Your bill of ₹${activeOrder.grandTotal.toFixed(2)} is ready! Click to pay.`
+                      : activeOrder.status === 'payment_pending_confirmation'
+                      ? `Payment of ₹${activeOrder.grandTotal.toFixed(2)} sent! Awaiting verification.`
                       : activeOrder.status === 'rejected'
                       ? `Declined by store.${activeOrder.rejectionReason ? ` Reason: "${activeOrder.rejectionReason}"` : ''}`
                       : 'Order sent to shopkeeper. Awaiting weight confirmation.'}
@@ -392,6 +418,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                 className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold shrink-0 flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 ${
                   activeOrder.status === 'approved'
                     ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950'
+                    : activeOrder.status === 'payment_pending_confirmation'
+                    ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950'
                     : activeOrder.status === 'rejected'
                     ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950'
                     : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950'
@@ -400,6 +428,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                 <Receipt className="w-4 h-4" />
                 {activeOrder.status === 'approved'
                   ? 'View Bill & Pay'
+                  : activeOrder.status === 'payment_pending_confirmation'
+                  ? 'Track Verification'
                   : activeOrder.status === 'rejected'
                   ? 'View Details'
                   : 'Track Status'}

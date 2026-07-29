@@ -14,6 +14,7 @@ interface HeaderProps {
   onToggleSound: () => void;
   onLogout: () => void;
   orders: Order[];
+  syncStatus?: 'synced' | 'syncing' | 'error';
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -27,13 +28,14 @@ export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
   onLogout,
-  orders
+  orders,
+  syncStatus = 'synced'
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
 
   const getNotifications = () => {
     if (role === 'shopkeeper') {
-       return orders
+       const orderNotifs = orders
          .filter(o => o.status === 'sent_to_shopkeeper')
          .map(o => ({
            id: o.id,
@@ -42,16 +44,52 @@ export const Header: React.FC<HeaderProps> = ({
            date: o.createdAt,
            type: 'info'
          }));
-    } else {
-       return orders
-         .filter(o => o.customerPhone === customerSession.phone && (o.status === 'approved' || o.status === 'rejected' || o.status === 'cancelled'))
+       const paymentNotifs = orders
+         .filter(o => o.status === 'payment_pending_confirmation')
          .map(o => ({
            id: o.id,
-           title: `Order ${o.status.charAt(0).toUpperCase() + o.status.slice(1)}`,
-           message: `Your order #${o.id.slice(-4)} was ${o.status}.`,
+           title: 'Payment Pending Verification',
+           message: `Order #${o.id.slice(-4)} from ${o.customerName} paid via ${o.paymentMethod || 'UPI'}. Please verify!`,
            date: o.updatedAt,
-           type: o.status === 'approved' ? 'success' : 'error'
+           type: 'warning'
          }));
+       return [...orderNotifs, ...paymentNotifs];
+    } else {
+       return orders
+         .filter(o => o.customerPhone === customerSession.phone && (o.status === 'approved' || o.status === 'rejected' || o.status === 'cancelled' || o.status === 'paid' || o.status === 'payment_pending_confirmation'))
+         .map(o => {
+           let title = `Order ${o.status.charAt(0).toUpperCase() + o.status.slice(1)}`;
+           let message = `Your order #${o.id.slice(-4)} was ${o.status}.`;
+           let type = 'info';
+           if (o.status === 'payment_pending_confirmation') {
+             title = 'Payment Sent';
+             message = `Your payment for order #${o.id.slice(-4)} was sent. Awaiting shopkeeper confirmation.`;
+             type = 'warning';
+           } else if (o.status === 'paid') {
+             title = 'Payment Confirmed';
+             message = `Your payment for order #${o.id.slice(-4)} has been confirmed! Thank you.`;
+             type = 'success';
+           } else if (o.status === 'approved') {
+             title = 'Order Approved';
+             message = `Your order #${o.id.slice(-4)} has been approved. Please pay to complete checkout.`;
+             type = 'success';
+           } else if (o.status === 'rejected') {
+             title = 'Order Declined';
+             message = `Your order #${o.id.slice(-4)} was declined.`;
+             type = 'error';
+           } else if (o.status === 'cancelled') {
+             title = 'Order Cancelled';
+             message = `Your order #${o.id.slice(-4)} was cancelled.`;
+             type = 'error';
+           }
+           return {
+             id: o.id,
+             title,
+             message,
+             date: o.updatedAt,
+             type
+           };
+         });
     }
   };
 
@@ -67,10 +105,26 @@ export const Header: React.FC<HeaderProps> = ({
             <Store className="w-5 h-5 text-slate-950" />
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <h1 className="text-base font-extrabold tracking-tight text-white">
                 Farmer's Gate
               </h1>
+              {syncStatus === 'syncing' ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-[9px] font-bold text-amber-400 tracking-wider uppercase select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  Syncing
+                </span>
+              ) : syncStatus === 'error' ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-[9px] font-bold text-rose-400 tracking-wider uppercase select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
+                  Offline
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold text-emerald-400 tracking-wider uppercase select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Sync
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400 font-medium hidden sm:block">
               Main Market Branch

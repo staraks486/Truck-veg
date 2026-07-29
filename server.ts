@@ -49,6 +49,27 @@ async function startServer() {
     }
   }
 
+  // Real-time clients array for broadcasting updates instantly
+  let sseClients: any[] = [];
+
+  // Server-Sent Events stream for instant sub-second desktop-mobile sync
+  app.get("/api/sync/stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    // Push connection to subscribers list
+    sseClients.push(res);
+
+    // Send the current store immediately on connection so the mobile / desktop is fully loaded
+    res.write(`data: ${JSON.stringify({ type: "init", store: serverStore })}\n\n`);
+
+    req.on("close", () => {
+      sseClients = sseClients.filter(c => c !== res);
+    });
+  });
+
   // Real-time Sync Endpoints for Desktop-Mobile multi-device synchronization
   app.get("/api/sync", (req, res) => {
     res.json(serverStore);
@@ -62,6 +83,17 @@ async function startServer() {
       if (incomingTime > current.updatedAt) {
         serverStore[type] = { data, updatedAt: incomingTime };
         saveStoreToFile();
+
+        // Broadcast to all active SSE subscribers instantly
+        const payload = JSON.stringify({ type, data, updatedAt: incomingTime });
+        sseClients.forEach(client => {
+          try {
+            client.write(`data: ${payload}\n\n`);
+          } catch (e) {
+            // Client connection might have dropped
+          }
+        });
+
         res.json({ success: true, updated: true, serverUpdatedAt: incomingTime });
       } else {
         res.json({ success: true, updated: false, serverUpdatedAt: current.updatedAt, reason: "Server contains newer data" });

@@ -49,7 +49,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const handleSimulatePayment = (method: 'UPI' | 'Cash' | 'Card') => {
     setIsProcessingPayment(true);
     setTimeout(() => {
-      onUpdateOrderStatus(order.id, 'paid', method);
+      onUpdateOrderStatus(order.id, 'payment_pending_confirmation', method);
       setIsProcessingPayment(false);
       try {
         confetti({
@@ -90,6 +90,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         <div className={`p-4 text-white flex justify-between items-center ${
           order.status === 'paid'
             ? 'bg-emerald-700'
+            : order.status === 'payment_pending_confirmation'
+            ? 'bg-amber-600'
             : order.status === 'approved'
             ? 'bg-teal-800'
             : order.status === 'rejected'
@@ -98,6 +100,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         }`}>
           <div className="flex items-center gap-2">
             {order.status === 'paid' && <CheckCircle2 className="w-5 h-5 text-emerald-300" />}
+            {order.status === 'payment_pending_confirmation' && <Clock className="w-5 h-5 text-amber-200 animate-pulse" />}
             {order.status === 'approved' && <QrCode className="w-5 h-5 text-teal-300" />}
             {order.status === 'sent_to_shopkeeper' && <Clock className="w-5 h-5 text-amber-300 animate-spin" />}
             {order.status === 'rejected' && <AlertTriangle className="w-5 h-5 text-rose-300" />}
@@ -107,6 +110,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 <h3 className="font-extrabold text-sm capitalize">
                   {order.status === 'paid'
                     ? 'Payment Completed & Verified'
+                    : order.status === 'payment_pending_confirmation'
+                    ? 'Payment Sent - Pending Verification'
                     : order.status === 'approved'
                     ? 'Order Accepted by Shopkeeper'
                     : order.status === 'rejected'
@@ -116,6 +121,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                   order.status === 'approved'
                     ? 'bg-emerald-300 text-emerald-950'
+                    : order.status === 'payment_pending_confirmation'
+                    ? 'bg-amber-200 text-amber-950'
                     : order.status === 'sent_to_shopkeeper'
                     ? 'bg-amber-300 text-amber-950'
                     : order.status === 'paid'
@@ -124,6 +131,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 }`}>
                   {order.status === 'approved'
                     ? 'ACCEPTED'
+                    : order.status === 'payment_pending_confirmation'
+                    ? 'VERIFYING'
                     : order.status === 'sent_to_shopkeeper'
                     ? 'WAITING'
                     : order.status === 'paid'
@@ -288,6 +297,23 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
           {order.status === 'approved' && (
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-center space-y-3 animate-fadeIn">
+              {order.paymentReminderSent && (
+                <div className="p-3 bg-rose-50 border-2 border-rose-300 rounded-xl text-xs text-rose-800 space-y-1 text-left animate-pulse mb-3">
+                  <p className="font-extrabold flex items-center gap-1.5 text-rose-900 uppercase">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce" />
+                    <span>⚠️ Payment Reminder from Store</span>
+                  </p>
+                  <p className="font-semibold text-rose-700 leading-relaxed text-[11px] pl-5">
+                    {order.paymentReminderMessage || "Please complete your payment soon. The shopkeeper is waiting for your payment to finalize this checkout."}
+                  </p>
+                  {order.paymentReminderSentAt && (
+                    <span className="block mt-1 text-[10px] text-rose-500 font-mono font-bold pl-5">
+                      Reminder received: {new Date(order.paymentReminderSentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div className="inline-block px-3 py-1 bg-emerald-200 text-emerald-950 font-black text-xs rounded-full uppercase tracking-wider">
                 Status: ACCEPTED BY SHOPKEEPER
               </div>
@@ -357,6 +383,23 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   <XCircle className="w-4 h-4" />
                   <span>Cancel Order Instead</span>
                 </button>
+              </div>
+            </div>
+          )}
+
+          {order.status === 'payment_pending_confirmation' && (
+            <div className="p-5 bg-amber-50 rounded-2xl border border-amber-300 text-center space-y-4 animate-fadeIn">
+              <div className="w-12 h-12 bg-amber-500 text-white rounded-full flex items-center justify-center mx-auto shadow-md animate-pulse">
+                <Clock className="w-6 h-6 animate-spin" />
+              </div>
+              <div className="inline-block px-3 py-1 bg-amber-200 text-amber-950 font-black text-xs rounded-full uppercase tracking-wider">
+                Status: Payment Sent (Verification Pending)
+              </div>
+              <p className="text-xs text-amber-900 max-w-sm mx-auto font-semibold leading-relaxed bg-white/80 p-3 rounded-xl border border-amber-200">
+                ⏳ <strong>Payment Completed via {order.paymentMethod}!</strong> Your payment notification has been sent to the shopkeeper's counter. Please wait while the shopkeeper verifies and confirms this transaction.
+              </p>
+              <div className="text-[10px] text-amber-700 font-medium">
+                Do not close this screen or go back. The app will automatically update as soon as the shopkeeper accepts the payment.
               </div>
             </div>
           )}
