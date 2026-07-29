@@ -1,4 +1,4 @@
-import { InventoryItem, Order, CustomerSession, CustomerRecord, ProductOffer, ExpenseItem, CampaignTriggerConfig } from '../types';
+import { InventoryItem, Order, CustomerSession, CustomerRecord, ProductOffer, ExpenseItem, CampaignTriggerConfig, CartItem } from '../types';
 import { INITIAL_INVENTORY, DEFAULT_STORE, SAMPLE_ORDERS, SAMPLE_CUSTOMERS } from '../data/mockData';
 
 const INVENTORY_KEY = 'qr_veg_inventory_v1';
@@ -10,6 +10,7 @@ const OFFERS_KEY = 'qr_veg_offers_v1';
 const EXPENSES_KEY = 'qr_veg_expenses_v1';
 const CAMPAIGN_CONFIG_KEY = 'qr_veg_campaign_config_v1';
 const TIMESTAMPS_KEY = 'qr_veg_sync_timestamps_v1';
+const CART_KEY = 'qr_veg_cart_v1';
 
 export const SCHEMA_VERSION = 1;
 
@@ -40,7 +41,8 @@ export async function pushToSyncServer(type: string, data: any, forceUpdatedAt?:
     store_config: 'storeConfig',
     customers: 'customers',
     inventory: 'inventory',
-    orders: 'orders'
+    orders: 'orders',
+    cart: 'cart'
   };
 
   const serverType = syncTypeMap[type];
@@ -63,10 +65,36 @@ export async function pushToSyncServer(type: string, data: any, forceUpdatedAt?:
   window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type } }));
 }
 
+export function getStoredCart(): CartItem[] {
+  try {
+    const raw = localStorage.getItem(CART_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Error loading cart:', e);
+  }
+  return [];
+}
+
+export function saveStoredCart(cart: CartItem[]) {
+  try {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+    const now = Date.now();
+    pushToSyncServer('cart', cart, now);
+  } catch (e) {
+    console.error('Error saving cart:', e);
+  }
+}
+
 export function getStoredExpenses(): ExpenseItem[] {
   try {
     const raw = localStorage.getItem(EXPENSES_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch (e) {
     console.error('Error reading expenses:', e);
   }
@@ -147,7 +175,10 @@ export function saveStoredCampaignTrigger(config: CampaignTriggerConfig) {
 export function getStoredOffers(): ProductOffer[] {
   try {
     const raw = localStorage.getItem(OFFERS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch (e) {
     console.error('Error reading offers:', e);
   }
@@ -328,11 +359,13 @@ export function getStoredCustomers(): CustomerRecord[] {
   try {
     const raw = localStorage.getItem(CUSTOMERS_KEY);
     if (raw) {
-      const list: CustomerRecord[] = JSON.parse(raw);
-      if (deleted.length > 0) {
-        return list.filter(c => !isPhoneInDeletedList(c.phone, deleted) && !isPhoneInDeletedList(c.id, deleted));
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        if (deleted.length > 0) {
+          return list.filter(c => c && typeof c === 'object' && !isPhoneInDeletedList(c.phone, deleted) && !isPhoneInDeletedList(c.id, deleted));
+        }
+        return list;
       }
-      return list;
     }
   } catch (e) {
     console.error('Error reading customers:', e);
@@ -504,7 +537,10 @@ export function clearAllStoredCustomers(): CustomerRecord[] {
 export function getStoredInventory(): InventoryItem[] {
   try {
     const raw = localStorage.getItem(INVENTORY_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch (e) {
     console.error('Error reading inventory:', e);
   }
@@ -525,11 +561,12 @@ export function saveStoredInventory(items: InventoryItem[]) {
 export function getStoredOrders(): Order[] {
   try {
     const raw = localStorage.getItem(ORDERS_KEY);
-    let orders: Order[] = raw ? JSON.parse(raw) : SAMPLE_ORDERS;
+    let parsed = raw ? JSON.parse(raw) : null;
+    let orders: Order[] = Array.isArray(parsed) ? parsed : SAMPLE_ORDERS;
     const deletedPhones = getDeletedCustomerPhones();
     if (deletedPhones.length > 0) {
       orders = orders.map((ord) => {
-        if (isPhoneInDeletedList(ord.customerPhone, deletedPhones)) {
+        if (ord && isPhoneInDeletedList(ord.customerPhone, deletedPhones)) {
           return {
             ...ord,
             customerName: 'Deleted Customer',

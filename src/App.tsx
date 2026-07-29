@@ -13,7 +13,9 @@ import {
   registerOrUpdateCustomer,
   getLocalTimestamp,
   setLocalTimestamp,
-  SCHEMA_VERSION
+  SCHEMA_VERSION,
+  getStoredCart,
+  saveStoredCart
 } from './utils/storageManager';
 
 import { formatOrderWhatsAppMessage, openWhatsAppShare } from './utils/whatsappHelper';
@@ -32,7 +34,7 @@ export default function App() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customerSession, setCustomerSession] = useState<CustomerSession>(getStoredCustomerSession());
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(getStoredCart());
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
   // Modals state
@@ -48,6 +50,7 @@ export default function App() {
       setInventory(getStoredInventory());
       setOrders(getStoredOrders());
       setCustomerSession(getStoredCustomerSession());
+      setCart(getStoredCart());
     };
 
     const syncWithServer = async () => {
@@ -109,6 +112,7 @@ export default function App() {
         processSyncItem('offers', 'qr_veg_offers_v1');
         processSyncItem('expenses', 'qr_veg_expenses_v1');
         processSyncItem('campaignConfig', 'qr_veg_campaign_config_v1');
+        processSyncItem('cart', 'qr_veg_cart_v1', setCart);
 
         if (changed) {
           loadAllData();
@@ -504,6 +508,15 @@ export default function App() {
     if (soundEnabled) playChimeSound('click');
     setCart([]);
   };
+
+  // Sync cart to local storage and the server on change, avoiding loops
+  useEffect(() => {
+    const rawLocal = localStorage.getItem('qr_veg_cart_v1');
+    const currentStr = JSON.stringify(cart);
+    if (rawLocal !== currentStr) {
+      saveStoredCart(cart);
+    }
+  }, [cart]);
 
   // Submit order from Customer
   const handleSubmitOrder = (

@@ -20,6 +20,7 @@ async function startServer() {
     offers: { data: null, updatedAt: 0 },
     expenses: { data: null, updatedAt: 0 },
     campaignConfig: { data: null, updatedAt: 0 },
+    cart: { data: null, updatedAt: 0 },
   };
 
   try {

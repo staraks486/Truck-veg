@@ -1014,16 +1014,6 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
             <span className="text-[10px] font-bold">Home</span>
           </button>
 
-
-
-          <button 
-            onClick={() => setActiveTab('offers')} 
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'offers' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
-          >
-            <OfferTag className="w-5 h-5" />
-            <span className="text-[10px] font-bold">Offers</span>
-          </button>
-
           <button 
             onClick={() => setActiveTab('cart')} 
             className={`flex flex-col items-center gap-1 transition-colors relative ${activeTab === 'cart' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
@@ -1035,6 +1025,14 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
               </span>
             )}
             <span className="text-[10px] font-bold">Cart</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('offers')} 
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'offers' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <OfferTag className="w-5 h-5" />
+            <span className="text-[10px] font-bold">Offers</span>
           </button>
 
           <button 
