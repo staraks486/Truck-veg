@@ -250,88 +250,90 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
     <div className="bg-[#f9fafb] min-h-screen pb-28">
       {/* Header Area */}
       <div className="px-4 sm:px-6 pt-4 pb-3 bg-[#f9fafb] sticky top-0 z-25">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl sm:text-[24px] font-bold text-gray-900 leading-tight">Hi, {userName} 👋</h1>
-            <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">What would you like to buy today?</p>
-          </div>
-          <div className="flex items-center gap-2.5">
-            {/* Notification Bell Icon */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl sm:text-[24px] font-bold text-gray-900 leading-tight">Hi, {userName} 👋</h1>
+              <p className="text-xs sm:text-sm text-gray-500 font-medium mt-0.5">What would you like to buy today?</p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              {/* Notification Bell Icon */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center border border-gray-100 hover:bg-gray-50 transition-colors"
+                  title="Notifications"
+                >
+                  <Bell className="w-5 h-5 text-gray-700" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-rose-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-xs sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 text-slate-900">
+                    <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="font-bold text-sm">Notifications</h3>
+                      <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{customerNotifications.length}</span>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      {customerNotifications.length === 0 ? (
+                        <div className="p-6 text-center text-gray-400 text-sm">
+                          No new notifications
+                        </div>
+                      ) : (
+                        customerNotifications.map(notif => (
+                          <div key={notif.id} className="p-3 border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${notif.type === 'success' ? 'bg-green-500' : 'bg-rose-500'}`} />
+                              <h4 className="font-semibold text-xs sm:text-sm text-gray-900">{notif.title}</h4>
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1 pl-4">{notif.message}</p>
+                            <p className="text-[10px] text-gray-400 mt-1 pl-4">{new Date(notif.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cart Icon */}
+              <button 
+                onClick={() => setActiveTab('cart')}
                 className="relative w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center border border-gray-100 hover:bg-gray-50 transition-colors"
-                title="Notifications"
               >
-                <Bell className="w-5 h-5 text-gray-700" />
-                {unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-rose-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-                    {unreadCount}
+                <ShoppingBag className="w-5 h-5 text-gray-800" />
+                {cartBadgeCount > 0 && (
+                  <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-[#427A38] text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                    {cartBadgeCount}
                   </span>
                 )}
               </button>
-
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-xs sm:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 text-slate-900">
-                  <div className="p-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="font-bold text-sm">Notifications</h3>
-                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{customerNotifications.length}</span>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto">
-                    {customerNotifications.length === 0 ? (
-                      <div className="p-6 text-center text-gray-400 text-sm">
-                        No new notifications
-                      </div>
-                    ) : (
-                      customerNotifications.map(notif => (
-                        <div key={notif.id} className="p-3 border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${notif.type === 'success' ? 'bg-green-500' : 'bg-rose-500'}`} />
-                            <h4 className="font-semibold text-xs sm:text-sm text-gray-900">{notif.title}</h4>
-                          </div>
-                          <p className="text-xs text-gray-600 mt-1 pl-4">{notif.message}</p>
-                          <p className="text-[10px] text-gray-400 mt-1 pl-4">{new Date(notif.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
+          </div>
 
-            {/* Cart Icon */}
-            <button 
-              onClick={() => setActiveTab('cart')}
-              className="relative w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center border border-gray-100 hover:bg-gray-50 transition-colors"
-            >
-              <ShoppingBag className="w-5 h-5 text-gray-800" />
-              {cartBadgeCount > 0 && (
-                <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-[#427A38] text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
-                  {cartBadgeCount}
-                </span>
-              )}
+          {/* Search Bar */}
+          <div className="mt-3 relative flex items-center">
+            <Search className="w-5 h-5 text-gray-400 absolute left-3.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search for products"
+              className="w-full pl-11 pr-10 py-2.5 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] rounded-xl text-sm font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500/20 transition-all border border-gray-100"
+            />
+            <button className="absolute right-3.5 text-gray-400 hover:text-gray-600">
+              <Mic className="w-4 h-4" />
             </button>
           </div>
-        </div>
-
-        {/* Search Bar */}
-        <div className="mt-3 relative flex items-center">
-          <Search className="w-5 h-5 text-gray-400 absolute left-3.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search for products"
-            className="w-full pl-11 pr-10 py-2.5 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] rounded-xl text-sm font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500/20 transition-all border border-gray-100"
-          />
-          <button className="absolute right-3.5 text-gray-400 hover:text-gray-600">
-            <Mic className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
       {activeTab === 'home' && (
-        <div className="px-6 space-y-6 mt-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-6 mt-4">
           {/* Active Order Status Notification Banner */}
           {activeOrder && onViewReceipt && (
             <div className={`p-4 rounded-3xl shadow-sm border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all ${
@@ -465,7 +467,7 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
       )}
 
       {activeTab === 'offers' && (
-        <div className="px-6 space-y-4 mt-4">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-4 mt-4">
           {/* Offer Page Promotional Banner */}
           <div className="relative overflow-hidden rounded-3xl h-[130px] shadow-sm flex items-center p-6 text-white">
             <div className="absolute inset-0 z-0">
@@ -1002,45 +1004,47 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
       )}
 
       {/* Bottom Navigation (Always Visible, Never Hidden) */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200/60 px-6 py-2 flex items-center justify-between z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
-        <button 
-          onClick={() => { setActiveTab('home'); setSelectedCategory('All'); }} 
-          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'home' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
-        >
-          <Home className="w-5 h-5" />
-          <span className="text-[10px] font-bold">Home</span>
-        </button>
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200/60 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] max-w-lg mx-auto sm:rounded-t-2xl">
+        <div className="px-6 py-2 flex items-center justify-between">
+          <button 
+            onClick={() => { setActiveTab('home'); setSelectedCategory('All'); }} 
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'home' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <Home className="w-5 h-5" />
+            <span className="text-[10px] font-bold">Home</span>
+          </button>
 
 
 
-        <button 
-          onClick={() => setActiveTab('offers')} 
-          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'offers' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
-        >
-          <OfferTag className="w-5 h-5" />
-          <span className="text-[10px] font-bold">Offers</span>
-        </button>
+          <button 
+            onClick={() => setActiveTab('offers')} 
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'offers' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <OfferTag className="w-5 h-5" />
+            <span className="text-[10px] font-bold">Offers</span>
+          </button>
 
-        <button 
-          onClick={() => setActiveTab('cart')} 
-          className={`flex flex-col items-center gap-1 transition-colors relative ${activeTab === 'cart' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
-        >
-          <ShoppingBag className="w-5 h-5" />
-          {cartBadgeCount > 0 && (
-            <span className="absolute -top-1 right-0 w-3.5 h-3.5 bg-[#427A38] text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
-              {cartBadgeCount}
-            </span>
-          )}
-          <span className="text-[10px] font-bold">Cart</span>
-        </button>
+          <button 
+            onClick={() => setActiveTab('cart')} 
+            className={`flex flex-col items-center gap-1 transition-colors relative ${activeTab === 'cart' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <ShoppingBag className="w-5 h-5" />
+            {cartBadgeCount > 0 && (
+              <span className="absolute -top-1 right-0 w-3.5 h-3.5 bg-[#427A38] text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-white">
+                {cartBadgeCount}
+              </span>
+            )}
+            <span className="text-[10px] font-bold">Cart</span>
+          </button>
 
-        <button 
-          onClick={() => setActiveTab('profile')} 
-          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'profile' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
-        >
-          <User className="w-5 h-5" />
-          <span className="text-[10px] font-bold">Profile</span>
-        </button>
+          <button 
+            onClick={() => setActiveTab('profile')} 
+            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'profile' ? 'text-[#427A38]' : 'text-gray-400 hover:text-gray-600'}`}
+          >
+            <User className="w-5 h-5" />
+            <span className="text-[10px] font-bold">Profile</span>
+          </button>
+        </div>
       </div>
     </div>
   );
