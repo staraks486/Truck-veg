@@ -197,6 +197,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   onDeleteItem,
   onToggleStock
 }) => {
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
@@ -275,14 +276,14 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   // Collect all unique categories present in inventory + managed categories list
   const allCategories = Array.from(
-    new Set([...categoriesList, ...inventory.map((i) => i.category)])
+    new Set([...categoriesList, ...safeInventory.map((i) => i.category)])
   ).filter(Boolean);
 
   const categoriesInInventory = Array.from(
-    new Set(inventory.map((item) => item.category))
+    new Set(safeInventory.map((item) => item.category))
   ).filter(Boolean);
 
-  const favoriteCount = inventory.filter((i) => i.isFavorite).length;
+  const favoriteCount = safeInventory.filter((i) => i.isFavorite).length;
 
   // Quick toggle item favorite status
   const handleToggleFavoriteItem = (item: InventoryItem, e?: React.MouseEvent) => {
@@ -294,7 +295,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
   };
 
   // Filter inventory
-  const filteredInventory = inventory.filter((item) => {
+  const filteredInventory = safeInventory.filter((item) => {
     const matchesCategory =
       selectedCategoryFilter === 'All'
         ? true
@@ -448,7 +449,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
     });
 
     // Update all inventory items under this category
-    inventory.forEach((item) => {
+    safeInventory.forEach((item) => {
       if (item.category === oldCategory) {
         onSaveItem({
           ...item,
@@ -490,7 +491,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
 
     // 1. Reassign items to fallback category if any exist
     let reassignedCount = 0;
-    inventory.forEach((item) => {
+    safeInventory.forEach((item) => {
       if (item.category === catToDelete) {
         onSaveItem({
           ...item,
@@ -727,7 +728,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
               selectedCategoryFilter === 'All' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'
             }`}>
-              {inventory.length}
+              {safeInventory.length}
             </span>
           </button>
 
@@ -751,7 +752,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
           </button>
 
           {allCategories.map((cat) => {
-            const count = inventory.filter((i) => i.category === cat).length;
+            const count = safeInventory.filter((i) => i.category === cat).length;
             const isSelected = selectedCategoryFilter === cat;
             return (
               <button
@@ -1046,7 +1047,7 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({
                 </label>
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                   {allCategories.map((cat) => {
-                    const count = inventory.filter((i) => i.category === cat).length;
+                    const count = safeInventory.filter((i) => i.category === cat).length;
                     const isEditingThis = editingCategoryName === cat;
 
                     return (

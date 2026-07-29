@@ -58,13 +58,15 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
   activeOrder,
   onViewReceipt
 }) => {
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+
   const [selectedCategory, setSelectedCategory] = useState<Category>('All');
   const [searchQuery, setSearchQuery] = useState('');
 
   const availableCategories = useMemo(() => {
-    const catsInInventory = Array.from(new Set(inventory.map((i) => i.category).filter(Boolean)));
+    const catsInInventory = Array.from(new Set(safeInventory.map((i) => i.category).filter(Boolean)));
     return ['All', ...catsInInventory];
-  }, [inventory]);
+  }, [safeInventory]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeTab, setActiveTab] = useState<'home' | 'offers' | 'cart' | 'profile'>('home');
 
@@ -104,8 +106,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
 
   const suggestedProducts = useMemo(() => {
     const cartItemIds = new Set(cart.map(c => c.itemId));
-    return inventory.filter(item => !cartItemIds.has(item.id) && item.stockQuantity > 0).slice(0, 6);
-  }, [inventory, cart]);
+    return safeInventory.filter(item => !cartItemIds.has(item.id) && item.stockQuantity > 0).slice(0, 6);
+  }, [safeInventory, cart]);
 
   const handleApplyPromoCode = (codeToApply?: string) => {
     const code = (codeToApply || promoInput).trim().toUpperCase();
@@ -171,12 +173,12 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
   };
 
   const filteredItems = useMemo(() => {
-    return inventory.filter(item => {
+    return safeInventory.filter(item => {
       const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [inventory, searchQuery, selectedCategory]);
+  }, [safeInventory, searchQuery, selectedCategory]);
 
   const customerNotifications = useMemo(() => {
     const list = orders
@@ -212,7 +214,7 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
   const handleReorder = (order: Order) => {
     let addedCount = 0;
     order.items.forEach(orderItem => {
-      const invItem = inventory.find(i => i.id === orderItem.itemId);
+      const invItem = safeInventory.find(i => i.id === orderItem.itemId);
       if (invItem && invItem.inStock && invItem.stockQuantity > 0) {
         const isKg = invItem.unitType === 'kg';
         const maxStockGramsOrUnits = isKg ? Math.round(invItem.stockQuantity * 1000) : invItem.stockQuantity;

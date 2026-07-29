@@ -103,6 +103,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   onViewOrderReceipt,
   onAddOrder
 }) => {
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
   const [storeConfig, setStoreConfig] = useState<StoreConfig>(getStoredStoreConfig());
   const [activeTab, setActiveTab] = useState<
     'manual_sale' | 'orders' | 'inventory' | 'sales_income' | 'expenses' | 'customers' | 'offers_promo' | 'app_settings' | 'whatsapp_scheduler'
@@ -447,8 +448,8 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   const pendingOrders = orders.filter((o) => o.status === 'sent_to_shopkeeper');
   const approvedOrders = orders.filter((o) => o.status === 'approved' || o.status === 'paid');
   const todayTotalSales = approvedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
-  const totalStockItems = inventory.length;
-  const outOfStockItems = inventory.filter((i) => !i.inStock || i.stockQuantity <= 0).length;
+  const totalStockItems = safeInventory.length;
+  const outOfStockItems = safeInventory.filter((i) => !i.inStock || i.stockQuantity <= 0).length;
 
   // Compute weekly daily sales data for Recharts
   const getWeeklySalesData = () => {
@@ -660,7 +661,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
 
   const handleAddItemToOrder = (inventoryItemId: string) => {
     if (!inventoryItemId) return;
-    const inventoryItem = inventory.find(i => i.id === inventoryItemId);
+    const inventoryItem = safeInventory.find(i => i.id === inventoryItemId);
     if (!inventoryItem) return;
 
     const defaultQty = inventoryItem.unitType === 'kg' ? 500 : 1;
@@ -911,7 +912,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
 
               {/* Item Cards Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[620px] overflow-y-auto pr-1">
-                {inventory
+                {safeInventory
                   .filter((i) => i.inStock)
                   .filter((i) => posCategory === 'All' || i.category === posCategory)
                   .filter((i) => !posSearch.trim() || i.name.toLowerCase().includes(posSearch.toLowerCase().trim()))
@@ -1540,7 +1541,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                                 className="flex-1 text-xs font-medium bg-white border border-amber-300 rounded-xl px-2.5 py-1.5 outline-none focus:ring-2 focus:ring-amber-500"
                               >
                                 <option value="">-- Select Produce to Add --</option>
-                                {inventory.map((inv) => (
+                                {safeInventory.map((inv) => (
                                   <option key={inv.id} value={inv.id}>
                                     {inv.name} ({formatCurrency(inv.pricePerUnit)}/{inv.unitType})
                                   </option>
@@ -2044,7 +2045,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
             <button
               type="button"
               onClick={() => {
-                const csvData = inventory.map(item => ({
+                const csvData = safeInventory.map(item => ({
                   'ID': item.id,
                   'Name': item.name,
                   'Category': item.category,
@@ -2063,7 +2064,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
             </button>
           </div>
           <InventoryManager
-            inventory={inventory}
+            inventory={safeInventory}
             onSaveItem={onSaveInventoryItem}
             onDeleteItem={onDeleteInventoryItem}
             onToggleStock={onToggleStock}
@@ -3388,7 +3389,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none"
                   >
                     <option value="ALL">🎁 All Store Inventory (General Coupon)</option>
-                    {inventory.map(item => (
+                    {safeInventory.map(item => (
                       <option key={item.id} value={item.id}>Specific: {item.name}</option>
                     ))}
                   </select>
@@ -3470,7 +3471,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
         <SimulateCustomerModal
           isOpen={isSimulateCustomerModalOpen}
           onClose={() => setIsSimulateCustomerModalOpen(false)}
-          inventory={inventory}
+          inventory={safeInventory}
           onAddOrder={(newOrder) => {
             onAddOrder(newOrder);
             toast(`Created new checkout order #${newOrder.id} for ${newOrder.customerName}!`);

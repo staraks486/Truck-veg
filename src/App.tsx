@@ -87,6 +87,13 @@ export default function App() {
 
           if (serverDataVal === null || serverDataVal === undefined) return;
 
+          // Ensure array structures are actually arrays
+          const arrayKeys = ['inventory', 'orders', 'customers', 'cart', 'offers', 'expenses'];
+          if (arrayKeys.includes(serverType) && !Array.isArray(serverDataVal)) {
+            console.warn(`Sync warning: expected array for ${serverType} but got`, serverDataVal);
+            return;
+          }
+
           const localTime = getLocalTimestamp(serverType);
 
           // We only update if the server's update is strictly newer than our local change time,

@@ -16,6 +16,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
   inventory,
   onAddOrder
 }) => {
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
   const [customerType, setCustomerType] = useState<'priya' | 'rahul' | 'vikram' | 'custom'>('priya');
   const [customName, setCustomName] = useState('');
   const [customPhone, setCustomPhone] = useState('');
@@ -51,7 +52,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
   };
 
   const handleAddItemToCustom = (itemId: string) => {
-    const item = inventory.find((i) => i.id === itemId);
+    const item = safeInventory.find((i) => i.id === itemId);
     if (!item) return;
     const defaultWt = item.unitType === 'kg' ? 1000 : 1;
     setCustomItems((prev) => [...prev, { itemId, quantityOrWeight: defaultWt }]);
@@ -84,7 +85,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
     } else {
       if (customItems.length === 0) {
         // Fallback default item if none selected
-        rawItems = [{ itemId: inventory[0]?.id || 'veg-1', quantityOrWeight: 1000 }];
+        rawItems = [{ itemId: safeInventory[0]?.id || 'veg-1', quantityOrWeight: 1000 }];
       } else {
         rawItems = customItems;
       }
@@ -92,7 +93,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
 
     const orderItems: OrderItem[] = rawItems
       .map((ri) => {
-        const item = inventory.find((inv) => inv.id === ri.itemId);
+        const item = safeInventory.find((inv) => inv.id === ri.itemId);
         if (!item) return null;
         const totalPrice =
           item.unitType === 'kg'
@@ -237,7 +238,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
                     }}
                   >
                     <option value="">+ Add item to cart...</option>
-                    {inventory.map((i) => (
+                    {safeInventory.map((i) => (
                       <option key={i.id} value={i.id}>
                         {i.name} ({formatCurrency(i.pricePerUnit)}/{i.unitType})
                       </option>
@@ -248,7 +249,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
                 {customItems.length > 0 && (
                   <div className="space-y-1.5 mt-2">
                     {customItems.map((ci, idx) => {
-                      const item = inventory.find((i) => i.id === ci.itemId);
+                      const item = safeInventory.find((i) => i.id === ci.itemId);
                       if (!item) return null;
                       return (
                         <div
