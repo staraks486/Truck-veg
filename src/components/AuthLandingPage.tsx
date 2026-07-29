@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserRole, CustomerSession } from '../types';
 import { getStoredStoreConfig, getStoredCustomers, registerOrUpdateCustomer } from '../utils/storageManager';
-import { Store, UserCheck, Shield, Lock, Phone, ArrowRight, CheckCircle2, Sparkles, Scale, QrCode } from 'lucide-react';
+import { Store, UserCheck, Shield, Lock, Phone, ArrowRight, CheckCircle2, Sparkles, Scale, QrCode, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface AuthLandingPageProps {
@@ -42,6 +42,7 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
   const [customerPhone, setCustomerPhone] = useState(customerSession.phone || '');
   const [customerError, setCustomerError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [useWhatsAppOnly, setUseWhatsAppOnly] = useState(false);
 
   // Shopkeeper form state
   const [shopkeeperPin, setShopkeeperPin] = useState('');
@@ -56,45 +57,57 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
       return;
     }
 
-    if (!isRegistering) {
-      // Step 1: Check if mobile number exists
-      const customers = getStoredCustomers();
-      const inputDigits = phoneToUse.replace(/\D/g, '');
-      const existingCustomer = customers.find(c => {
-        const cDigits = c.phone.replace(/\D/g, '');
-        return cDigits === inputDigits || (cDigits.slice(-10) === inputDigits.slice(-10) && inputDigits.length >= 10);
-      });
+    const customers = getStoredCustomers();
+    const inputDigits = phoneToUse.replace(/\D/g, '');
+    const existingCustomer = customers.find(c => {
+      const cDigits = c.phone.replace(/\D/g, '');
+      return cDigits === inputDigits || (cDigits.slice(-10) === inputDigits.slice(-10) && inputDigits.length >= 10);
+    });
 
-      if (existingCustomer) {
-        // Mobile number exists! Log them in directly
-        setCustomerName(existingCustomer.name);
-        onSaveSession({
-          ...customerSession,
-          name: existingCustomer.name,
-          phone: phoneToUse,
-          isLoggedIn: true
-        });
-        registerOrUpdateCustomer(existingCustomer.name, phoneToUse);
-        onSelectRole('customer', existingCustomer.name, phoneToUse);
-      } else {
-        // Mobile number does not exist! Prompt for registration name
-        setIsRegistering(true);
-        setCustomerError('');
-      }
-    } else {
-      // Step 2: Registering a new customer
-      if (!customerName.trim()) {
-        setCustomerError('Please enter your name to register');
-        return;
-      }
+    if (existingCustomer) {
+      // Mobile number exists! Log them in directly
+      setCustomerName(existingCustomer.name);
       onSaveSession({
         ...customerSession,
-        name: customerName.trim(),
+        name: existingCustomer.name,
         phone: phoneToUse,
         isLoggedIn: true
       });
-      registerOrUpdateCustomer(customerName.trim(), phoneToUse);
-      onSelectRole('customer', customerName.trim(), phoneToUse);
+      registerOrUpdateCustomer(existingCustomer.name, phoneToUse);
+      onSelectRole('customer', existingCustomer.name, phoneToUse);
+    } else {
+      if (useWhatsAppOnly) {
+        // Instant WhatsApp Register - Bypasses Name input!
+        const autoName = `WhatsApp Guest #${phoneToUse.slice(-4)}`;
+        onSaveSession({
+          ...customerSession,
+          name: autoName,
+          phone: phoneToUse,
+          isLoggedIn: true
+        });
+        registerOrUpdateCustomer(autoName, phoneToUse);
+        onSelectRole('customer', autoName, phoneToUse);
+      } else {
+        if (!isRegistering) {
+          // Regular flow: Prompt for registration name
+          setIsRegistering(true);
+          setCustomerError('');
+        } else {
+          // Regular flow: Registering a new customer
+          if (!customerName.trim()) {
+            setCustomerError('Please enter your name to register');
+            return;
+          }
+          onSaveSession({
+            ...customerSession,
+            name: customerName.trim(),
+            phone: phoneToUse,
+            isLoggedIn: true
+          });
+          registerOrUpdateCustomer(customerName.trim(), phoneToUse);
+          onSelectRole('customer', customerName.trim(), phoneToUse);
+        }
+      }
     }
   };
 
@@ -205,18 +218,32 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
 
             <div className="space-y-3 pt-2">
               <button
-                onClick={() => setStep('customer-form')}
-                className="w-full py-4 rounded-2xl font-black text-sm bg-[#57864B] hover:bg-[#476d3d] text-white transition-all shadow-lg shadow-[#57864B]/30 flex items-center justify-center gap-2 group cursor-pointer"
+                onClick={() => {
+                  setUseWhatsAppOnly(true);
+                  setStep('customer-form');
+                }}
+                className="w-full py-4 rounded-2xl font-black text-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 group cursor-pointer"
               >
-                <span>Get Started</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <MessageCircle className="w-4 h-4 text-emerald-100 animate-pulse" />
+                <span>⚡ Free Instant WhatsApp Login</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setUseWhatsAppOnly(false);
+                  setStep('customer-form');
+                }}
+                className="w-full py-3.5 rounded-2xl font-black text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>Regular Login with Name</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
 
               <button
                 onClick={() => setStep('shopkeeper-form')}
-                className="w-full py-3 rounded-2xl font-bold text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl font-semibold text-[11px] bg-slate-50 hover:bg-slate-100 text-slate-500 transition-colors flex items-center justify-center gap-1.5 border border-slate-200"
               >
-                <Shield className="w-4 h-4 text-amber-600" />
+                <Shield className="w-3.5 h-3.5 text-slate-400" />
                 <span>Shopkeeper Login (POS Admin)</span>
               </button>
             </div>
@@ -237,9 +264,9 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
 
         {step === 'customer-form' && (
           <form onSubmit={handleCustomerLogin} className="space-y-4 max-w-sm mx-auto">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1">
               <h2 className="text-xl font-black text-slate-900">
-                {isRegistering ? 'Register Account' : 'Customer Access'}
+                {useWhatsAppOnly ? 'WhatsApp Login' : isRegistering ? 'Register Account' : 'Customer Access'}
               </h2>
               <button 
                 type="button" 
@@ -251,13 +278,63 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                     setStep('intro');
                   }
                 }}
-                className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+                className="text-xs text-[#57864B] hover:text-[#476d3d] font-bold"
               >
-                Back
+                Back to Home
               </button>
             </div>
 
-            {isRegistering && (
+            {/* Mode Selector Tabs */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setUseWhatsAppOnly(true);
+                  setIsRegistering(false);
+                  setCustomerError('');
+                }}
+                className={`py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  useWhatsAppOnly
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp Only</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUseWhatsAppOnly(false);
+                  setIsRegistering(false);
+                  setCustomerError('');
+                }}
+                className={`py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  !useWhatsAppOnly
+                    ? 'bg-[#57864B] text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>Standard Sign-In</span>
+              </button>
+            </div>
+
+            {useWhatsAppOnly && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <h4 className="text-xs font-black text-emerald-800 flex items-center gap-1">
+                    <span>100% Free Quick Access</span>
+                    <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-full font-extrabold uppercase">Free</span>
+                  </h4>
+                  <p className="text-[11px] font-semibold text-emerald-600/95 mt-0.5 leading-relaxed">
+                    No name or password required. Enter your WhatsApp number below to log in or register instantly for free!
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!useWhatsAppOnly && isRegistering && (
               <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-start gap-2.5">
                 <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
@@ -271,7 +348,7 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Indian Mobile Number (+91)
+                {useWhatsAppOnly ? 'WhatsApp Mobile Number (+91)' : 'Indian Mobile Number (+91)'}
               </label>
               <div className="relative flex items-center">
                 <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg text-xs font-bold text-slate-700 border border-slate-300">
@@ -285,16 +362,16 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                   onChange={(e) => handlePhoneChange(e.target.value)}
                   placeholder="9876543210"
                   className={`w-full pl-24 pr-4 py-3 border-2 rounded-xl text-sm font-bold font-mono transition-all ${
-                    isRegistering 
+                    !useWhatsAppOnly && isRegistering 
                       ? 'bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed' 
                       : 'bg-white border-slate-950 text-black placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B]'
                   }`}
-                  disabled={isRegistering}
+                  disabled={!useWhatsAppOnly && isRegistering}
                 />
               </div>
             </div>
 
-            {isRegistering && (
+            {!useWhatsAppOnly && isRegistering && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -326,10 +403,18 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-4 rounded-2xl font-black text-sm bg-[#57864B] hover:bg-[#476d3d] text-white transition-all shadow-lg shadow-[#57864B]/30 flex items-center justify-center gap-2 group cursor-pointer"
+                className={`w-full py-4 rounded-2xl font-black text-sm transition-all shadow-lg flex items-center justify-center gap-2 group cursor-pointer ${
+                  useWhatsAppOnly
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
+                    : 'bg-[#57864B] hover:bg-[#476d3d] text-white shadow-[#57864B]/30'
+                }`}
               >
                 <span>
-                  {isRegistering ? 'Register & Start Shopping' : 'Continue'}
+                  {useWhatsAppOnly 
+                    ? '⚡ Start Shopping Instantly (Free)' 
+                    : isRegistering 
+                    ? 'Register & Start Shopping' 
+                    : 'Continue'}
                 </span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
