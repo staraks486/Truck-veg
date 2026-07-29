@@ -11,6 +11,8 @@ const EXPENSES_KEY = 'qr_veg_expenses_v1';
 const CAMPAIGN_CONFIG_KEY = 'qr_veg_campaign_config_v1';
 const TIMESTAMPS_KEY = 'qr_veg_sync_timestamps_v1';
 
+export const SCHEMA_VERSION = 1;
+
 export function getLocalTimestamp(type: string): number {
   try {
     const raw = localStorage.getItem(TIMESTAMPS_KEY);
@@ -51,7 +53,7 @@ export async function pushToSyncServer(type: string, data: any, forceUpdatedAt?:
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ type: serverType, data, updatedAt }),
+        body: JSON.stringify({ type: serverType, data, updatedAt, schemaVersion: SCHEMA_VERSION }),
       });
     } catch (e) {
       console.error(`Failed to sync ${type} with server:`, e);

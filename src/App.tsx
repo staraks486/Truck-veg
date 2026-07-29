@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, CheckCircle, XCircle, Receipt, X, Bell } from 'lucide-react';
+import { CheckCircle2, CheckCircle, XCircle, Receipt, X, Bell, AlertTriangle } from 'lucide-react';
 import { UserRole, InventoryItem, CartItem, Order, CustomerSession, OrderItem } from './types';
 import {
   getStoredInventory,
@@ -12,7 +12,8 @@ import {
   playChimeSound,
   registerOrUpdateCustomer,
   getLocalTimestamp,
-  setLocalTimestamp
+  setLocalTimestamp,
+  SCHEMA_VERSION
 } from './utils/storageManager';
 
 import { formatOrderWhatsAppMessage, openWhatsAppShare } from './utils/whatsappHelper';
@@ -39,6 +40,7 @@ export default function App() {
   const [isQRScannerModalOpen, setIsQRScannerModalOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeReceiptOrder, setActiveReceiptOrder] = useState<Order | null>(null);
+  const [isOutdatedVersion, setIsOutdatedVersion] = useState(false);
 
   // Load initial data & set up realtime cross-tab / cross-role synchronization
   useEffect(() => {
@@ -53,6 +55,18 @@ export default function App() {
         const response = await fetch('/api/sync');
         if (!response.ok) return;
         const serverData = await response.json();
+        
+        // Detect if client is running an outdated version that might cause data schema conflicts
+        let isOutdated = false;
+        for (const key of Object.keys(serverData)) {
+          const item = serverData[key];
+          if (item && typeof item === 'object' && 'schemaVersion' in item) {
+            if (item.schemaVersion > SCHEMA_VERSION) {
+              isOutdated = true;
+            }
+          }
+        }
+        setIsOutdatedVersion(isOutdated);
         
         let changed = false;
 
@@ -780,20 +794,42 @@ export default function App() {
 
   if (currentView === 'auth') {
     return (
-      <AuthLandingPage
-        onSelectRole={(selectedRole) => {
-          if (soundEnabled) playChimeSound('click');
-          setRole(selectedRole);
-          setCurrentView('app');
-        }}
-        customerSession={customerSession}
-        onSaveSession={handleSaveSession}
-      />
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        {isOutdatedVersion && (
+          <div className="bg-amber-600 text-white px-4 py-2.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-md relative z-50">
+            <AlertTriangle className="w-4.5 h-4.5 shrink-0 animate-pulse text-amber-100" />
+            <span>Outdated App Version Detected: A newer database schema is in use. Please reload to sync properly and avoid conflicts.</span>
+            <button onClick={() => window.location.reload()} className="underline bg-amber-800 hover:bg-amber-900 px-2 py-1 rounded ml-2 transition-all cursor-pointer">
+              Reload Now
+            </button>
+          </div>
+        )}
+        <div className="flex-1 flex flex-col">
+          <AuthLandingPage
+            onSelectRole={(selectedRole) => {
+              if (soundEnabled) playChimeSound('click');
+              setRole(selectedRole);
+              setCurrentView('app');
+            }}
+            customerSession={customerSession}
+            onSaveSession={handleSaveSession}
+          />
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col selection:bg-emerald-200">
+      {isOutdatedVersion && (
+        <div className="bg-amber-600 text-white px-4 py-2.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-md relative z-50">
+          <AlertTriangle className="w-4.5 h-4.5 shrink-0 animate-pulse text-amber-100" />
+          <span>Outdated App Version Detected: A newer database schema is in use. Please reload to sync properly and avoid conflicts.</span>
+          <button onClick={() => window.location.reload()} className="underline bg-amber-800 hover:bg-amber-900 px-2 py-1 rounded ml-2 transition-all cursor-pointer">
+            Reload Now
+          </button>
+        </div>
+      )}
       {/* Header Bar */}
       {role === 'shopkeeper' && (
         <Header
