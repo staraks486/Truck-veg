@@ -361,6 +361,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
             <div className={`p-4 rounded-3xl shadow-sm border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 transition-all ${
               activeOrder.status === 'approved'
                 ? 'bg-slate-900 text-white border-emerald-500 shadow-emerald-950/20'
+                : activeOrder.status === 'reviewed'
+                ? 'bg-slate-900 text-white border-sky-500 shadow-sky-950/20'
                 : activeOrder.status === 'rejected'
                 ? 'bg-slate-900 text-white border-rose-500 shadow-rose-950/20'
                 : 'bg-slate-900 text-white border-amber-500 shadow-amber-950/20'
@@ -369,12 +371,16 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
                   activeOrder.status === 'approved'
                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    : activeOrder.status === 'reviewed'
+                    ? 'bg-sky-500/20 text-sky-400 border-sky-500/30 animate-pulse'
                     : activeOrder.status === 'rejected'
                     ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
                     : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                 }`}>
                   {activeOrder.status === 'approved' ? (
                     <CheckCircle2 className="w-6 h-6 animate-pulse text-emerald-400" />
+                  ) : activeOrder.status === 'reviewed' ? (
+                    <ShoppingBag className="w-6 h-6 text-sky-400 animate-bounce" />
                   ) : activeOrder.status === 'rejected' ? (
                     <XCircle className="w-6 h-6 text-rose-400" />
                   ) : (
@@ -386,6 +392,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                     <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                       activeOrder.status === 'approved'
                         ? 'bg-emerald-500 text-slate-950'
+                        : activeOrder.status === 'reviewed'
+                        ? 'bg-sky-500 text-slate-950'
                         : activeOrder.status === 'payment_pending_confirmation'
                         ? 'bg-amber-500 text-slate-950'
                         : activeOrder.status === 'rejected'
@@ -394,6 +402,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                     }`}>
                       {activeOrder.status === 'approved'
                         ? 'Order Approved'
+                        : activeOrder.status === 'reviewed'
+                        ? 'Preparing Order'
                         : activeOrder.status === 'payment_pending_confirmation'
                         ? 'Payment Sent'
                         : activeOrder.status === 'rejected'
@@ -405,6 +415,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                   <p className="text-xs font-semibold text-slate-200 mt-1">
                     {activeOrder.status === 'approved'
                       ? `Your bill of ₹${activeOrder.grandTotal.toFixed(2)} is ready! Click to pay.`
+                      : activeOrder.status === 'reviewed'
+                      ? `Accepted! Shopkeeper is packing & weighing.${activeOrder.waitingTimeMinutes ? ` Est: ${activeOrder.waitingTimeMinutes} mins.` : ''}${activeOrder.waitingMessage ? ` Message: "${activeOrder.waitingMessage}"` : ' Preparing shortly.'}`
                       : activeOrder.status === 'payment_pending_confirmation'
                       ? `Payment of ₹${activeOrder.grandTotal.toFixed(2)} sent! Awaiting verification.`
                       : activeOrder.status === 'rejected'
@@ -418,6 +430,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                 className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold shrink-0 flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 ${
                   activeOrder.status === 'approved'
                     ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950'
+                    : activeOrder.status === 'reviewed'
+                    ? 'bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sky-950'
                     : activeOrder.status === 'payment_pending_confirmation'
                     ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950'
                     : activeOrder.status === 'rejected'
@@ -428,6 +442,8 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
                 <Receipt className="w-4 h-4" />
                 {activeOrder.status === 'approved'
                   ? 'View Bill & Pay'
+                  : activeOrder.status === 'reviewed'
+                  ? 'Track Order'
                   : activeOrder.status === 'payment_pending_confirmation'
                   ? 'Track Verification'
                   : activeOrder.status === 'rejected'

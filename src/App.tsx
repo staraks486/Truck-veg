@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, CheckCircle, XCircle, Receipt, X, Bell, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, CheckCircle, XCircle, Receipt, X, Bell, AlertTriangle, ShieldCheck, ShoppingBag, Clock } from 'lucide-react';
 import { UserRole, InventoryItem, CartItem, Order, CustomerSession, OrderItem } from './types';
 import {
   getStoredInventory,
@@ -253,13 +253,13 @@ export default function App() {
   const prevOrdersStatusRef = useRef<Record<string, Order['status']>>({});
   const knownShopkeeperOrdersRef = useRef<Set<string>>(new Set());
 
-  const showCustomerOrderStatusToast = (order: Order, newStatus: 'approved' | 'rejected' | 'cancelled') => {
+  const showCustomerOrderStatusToast = (order: Order, newStatus: Order['status']) => {
     if (newStatus === 'approved') {
       toast.custom(
         (t) => (
           <div className="bg-slate-900 border-2 border-emerald-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
             <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 bg-transparent">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
                   <CheckCircle2 className="w-6 h-6 animate-pulse text-emerald-400" />
                 </div>
@@ -310,12 +310,178 @@ export default function App() {
         ),
         { duration: 12000, position: 'top-center' }
       );
+    } else if (newStatus === 'reviewed') {
+      toast.custom(
+        (t) => (
+          <div className="bg-slate-900 border-2 border-sky-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3 bg-transparent">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30 animate-pulse">
+                  <ShoppingBag className="w-6 h-6 text-sky-400 animate-bounce" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500 text-slate-950">
+                      Order Accepted
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono font-bold">#{order.id.slice(-6)}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-0.5">
+                    Preparing & Packing Your Items
+                  </h4>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 leading-relaxed bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 space-y-1 bg-transparent">
+              <p>The shopkeeper accepted your order! They are currently packing and weighing your selected products.</p>
+              {order.waitingTimeMinutes && (
+                <p className="font-semibold text-sky-300 pt-1">
+                  Estimated waiting time: <strong className="text-sky-400">{order.waitingTimeMinutes} mins</strong>
+                </p>
+              )}
+              {order.waitingMessage && (
+                <p className="font-medium italic text-slate-300 bg-slate-950/40 p-2 rounded-lg text-[11px] mt-1 border border-slate-800">
+                  "{order.waitingMessage}"
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  toast.dismiss(t);
+                  setActiveReceiptOrder(order);
+                }}
+                className="flex-1 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>Track Live Order</span>
+              </button>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 12000, position: 'top-center' }
+      );
+    } else if (newStatus === 'payment_pending_confirmation') {
+      toast.custom(
+        (t) => (
+          <div className="bg-slate-900 border-2 border-amber-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3 bg-transparent">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+                  <Clock className="w-6 h-6 animate-spin text-amber-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                      Payment Submitted
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono font-bold">#{order.id.slice(-6)}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-0.5">
+                    Awaiting Verification
+                  </h4>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+              Your payment of <strong className="text-amber-400">₹{order.grandTotal.toFixed(2)}</strong> has been sent to the shopkeeper. Please wait while they verify the transaction.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  toast.dismiss(t);
+                  setActiveReceiptOrder(order);
+                }}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>Track Verification</span>
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 10000, position: 'top-center' }
+      );
+    } else if (newStatus === 'paid') {
+      toast.custom(
+        (t) => (
+          <div className="bg-slate-900 border-2 border-emerald-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3 bg-transparent">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                  <ShieldCheck className="w-6 h-6 text-emerald-400 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950">
+                      Payment Confirmed 🎉
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono font-bold">#{order.id.slice(-6)}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-0.5">
+                    Thank you for shopping!
+                  </h4>
+                </div>
+              </div>
+              <button
+                onClick={() => toast.dismiss(t)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                aria-label="Close notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60">
+              Your payment of <strong className="text-emerald-400">₹{order.grandTotal.toFixed(2)}</strong> has been verified successfully. Your order is ready for {order.fulfillmentType === 'home_delivery' ? 'Home Delivery' : 'Store Pickup'}!
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  toast.dismiss(t);
+                  setActiveReceiptOrder(order);
+                }}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>View Receipt</span>
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 12000, position: 'top-center' }
+      );
     } else if (newStatus === 'rejected') {
       toast.custom(
         (t) => (
           <div className="bg-slate-900 border-2 border-rose-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
             <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 bg-transparent">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
                   <XCircle className="w-6 h-6 text-rose-400" />
                 </div>
@@ -376,7 +542,7 @@ export default function App() {
         (t) => (
           <div className="bg-slate-900 border-2 border-rose-500 text-white rounded-2xl p-4 shadow-2xl max-w-md w-full flex flex-col gap-3 animate-in fade-in slide-in-from-top-5 duration-300">
             <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 bg-transparent">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/30">
                   <XCircle className="w-6 h-6 text-rose-400" />
                 </div>
@@ -441,12 +607,15 @@ export default function App() {
       orders.forEach((order) => {
         const prevStatus = prevOrdersStatusRef.current[order.id];
         if (prevStatus !== undefined && prevStatus !== order.status) {
-          if (order.status === 'approved' || order.status === 'rejected' || order.status === 'cancelled') {
+          if (['approved', 'rejected', 'cancelled', 'reviewed', 'payment_pending_confirmation', 'paid'].includes(order.status)) {
             const matchesCustomerPhone = !customerSession.phone || order.customerPhone === customerSession.phone;
             if (matchesCustomerPhone) {
               if (soundEnabled) {
-                if (order.status === 'approved') playChimeSound('order_approved');
-                else if (order.status === 'rejected' || order.status === 'cancelled') playChimeSound('order_cancelled');
+                if (['approved', 'reviewed', 'paid'].includes(order.status)) {
+                  playChimeSound('order_approved');
+                } else if (order.status === 'rejected' || order.status === 'cancelled') {
+                  playChimeSound('order_cancelled');
+                }
               }
               showCustomerOrderStatusToast(order, order.status);
             }
@@ -727,7 +896,9 @@ export default function App() {
     cancellationReason?: string,
     cancelledBy?: 'customer' | 'shopkeeper',
     paymentReminderSent?: boolean,
-    paymentReminderMessage?: string
+    paymentReminderMessage?: string,
+    waitingMessage?: string,
+    waitingTimeMinutes?: number
   ) => {
     let orderToRestore: Order | undefined;
 
@@ -752,6 +923,8 @@ export default function App() {
           paymentReminderSent: isPaidOrVerifying ? false : (paymentReminderSent !== undefined ? paymentReminderSent : order.paymentReminderSent),
           paymentReminderMessage: isPaidOrVerifying ? undefined : (paymentReminderMessage !== undefined ? paymentReminderMessage : order.paymentReminderMessage),
           paymentReminderSentAt: isPaidOrVerifying ? undefined : (paymentReminderSent ? new Date().toISOString() : order.paymentReminderSentAt),
+          waitingMessage: waitingMessage !== undefined ? waitingMessage : order.waitingMessage,
+          waitingTimeMinutes: waitingTimeMinutes !== undefined ? waitingTimeMinutes : order.waitingTimeMinutes,
           updatedAt: new Date().toISOString()
         };
       }

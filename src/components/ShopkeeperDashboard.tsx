@@ -86,7 +86,9 @@ interface ShopkeeperDashboardProps {
     cancellationReason?: string,
     cancelledBy?: 'customer' | 'shopkeeper',
     paymentReminderSent?: boolean,
-    paymentReminderMessage?: string
+    paymentReminderMessage?: string,
+    waitingMessage?: string,
+    waitingTimeMinutes?: number
   ) => void;
   onUpdateOrderWeights: (orderId: string, updatedItems: OrderItem[], shopkeeperNote?: string) => void;
   onSaveInventoryItem: (item: InventoryItem) => void;
@@ -216,6 +218,9 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   const [isSimulateCustomerModalOpen, setIsSimulateCustomerModalOpen] = useState(false);
   const [cancelingOrderModal, setCancelingOrderModal] = useState<Order | null>(null);
   const [cancelReasonInput, setCancelReasonInput] = useState('');
+  const [acceptingOrderModal, setAcceptingOrderModal] = useState<Order | null>(null);
+  const [customWaitingTime, setCustomWaitingTime] = useState<number>(10);
+  const [customWaitingMessage, setCustomWaitingMessage] = useState<string>('We are currently packing and preparing your items.');
 
 
   // Automated WhatsApp CRM & Scheduler State & Campaign Trigger Config
@@ -449,7 +454,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   };
 
   // Compute analytics metrics
-  const pendingOrders = orders.filter((o) => o.status === 'sent_to_shopkeeper');
+  const pendingOrders = orders.filter((o) => o.status === 'sent_to_shopkeeper' || o.status === 'reviewed');
   const approvedOrders = orders.filter((o) => o.status === 'approved' || o.status === 'paid' || o.status === 'payment_pending_confirmation');
   const todayTotalSales = approvedOrders.reduce((sum, o) => sum + o.grandTotal, 0);
   const totalStockItems = safeInventory.length;
@@ -784,12 +789,25 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     toast.success(`💳 Marked order #${order.id.slice(-6)} as Paid via ${paymentMethod}!`);
   };
 
-  const handleAcceptOrder = (order: Order) => {
-    onUpdateOrderStatus(order.id, 'approved');
+  const handleAcceptOrder = (order: Order, waitingMessage?: string, waitingTime?: number) => {
+    const nextStatus = (waitingMessage || waitingTime) ? 'reviewed' : 'approved';
+    onUpdateOrderStatus(
+      order.id, 
+      nextStatus, 
+      undefined, 
+      undefined, 
+      undefined, 
+      undefined, 
+      undefined, 
+      undefined, 
+      waitingMessage, 
+      waitingTime
+    );
     playChimeSound('order_approved');
-    toast.success(`✅ Live Order #${order.id.slice(-6)} Accepted! Customer notified.`, {
+    toast.success(`✅ Live Order #${order.id.slice(-6)} Accepted! ${waitingMessage ? 'Waiting message sent.' : 'Customer notified.'}`, {
       position: 'top-center'
     });
+    setAcceptingOrderModal(null);
   };
 
   const handleSendReminder = (order: Order, customMessage?: string) => {
@@ -1383,20 +1401,25 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
             <div className="space-y-4">
               {filteredOrders.map((order) => {
                 const isPending = order.status === 'sent_to_shopkeeper';
+                const isReviewed = order.status === 'reviewed';
                 const isEditingThis = editingOrderId === order.id;
 
                 return (
                   <div
                     key={order.id}
                     className={`bg-white rounded-3xl border transition-all shadow-sm overflow-hidden ${
-                      isPending ? 'border-amber-400 ring-1 ring-amber-400/20' : 'border-slate-200'
+                      isPending ? 'border-amber-400 ring-1 ring-amber-400/20' :
+                      isReviewed ? 'border-sky-400 ring-1 ring-sky-400/20' :
+                      'border-slate-200'
                     }`}
                   >
                     {/* Order Top Bar */}
                     <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs ${
-                          isPending ? 'bg-amber-500 text-slate-950' : 'bg-emerald-600 text-white'
+                          isPending ? 'bg-amber-500 text-slate-950' :
+                          isReviewed ? 'bg-sky-500 text-white' :
+                          'bg-emerald-600 text-white'
                         }`}>
                           {order.id.slice(-4)}
                         </div>
@@ -1407,12 +1430,15 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                               order.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
                               order.status === 'payment_pending_confirmation' ? 'bg-amber-100 text-amber-800 border border-amber-400 animate-pulse font-black' :
                               order.status === 'approved' ? 'bg-teal-100 text-teal-800' :
+                              order.status === 'reviewed' ? 'bg-sky-100 text-sky-800 border border-sky-300 animate-pulse font-extrabold' :
                               order.status === 'cancelled' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
                               order.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
                               'bg-amber-100 text-amber-800'
                             }`}>
                               {order.status === 'sent_to_shopkeeper'
                                 ? 'Pending Approval'
+                                : order.status === 'reviewed'
+                                ? 'Preparing Order'
                                 : order.status === 'payment_pending_confirmation'
                                 ? 'Verify Payment'
                                 : order.status === 'cancelled'
@@ -1450,7 +1476,11 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                         {isPending && (
                           <button
                             type="button"
-                            onClick={() => handleAcceptOrder(order)}
+                            onClick={() => {
+                              setAcceptingOrderModal(order);
+                              setCustomWaitingTime(10);
+                              setCustomWaitingMessage('We are currently packing and preparing your items.');
+                            }}
                             className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5 text-white" />
@@ -1636,7 +1666,11 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                           {isPending && (
                             <button
                               type="button"
-                              onClick={() => handleAcceptOrder(order)}
+                              onClick={() => {
+                                setAcceptingOrderModal(order);
+                                setCustomWaitingTime(10);
+                                setCustomWaitingMessage('We are currently packing and preparing your items.');
+                              }}
                               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
                             >
                               <CheckCircle2 className="w-4 h-4 text-white" />
@@ -3849,6 +3883,121 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Confirm Cancel Order</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Accept Order & Send Waiting Message Modal */}
+      {acceptingOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-base text-slate-900">Accept Order #{acceptingOrderModal.id.slice(-6)}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAcceptingOrderModal(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <p>Customer: <strong className="text-slate-900">{acceptingOrderModal.customerName}</strong> ({acceptingOrderModal.customerPhone})</p>
+              <p>Total Bill: <strong className="text-emerald-700 font-mono">{formatCurrency(acceptingOrderModal.grandTotal)}</strong> ({acceptingOrderModal.items.length} items)</p>
+            </div>
+
+            {/* Waiting Time Presets */}
+            <div className="space-y-2">
+              <label className="text-xs font-extrabold text-slate-800 block">Estimated Preparation Time:</label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {[5, 10, 15, 20, 30].map((mins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setCustomWaitingTime(mins)}
+                    className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      customWaitingTime === mins
+                        ? 'bg-sky-500 border-sky-600 text-white shadow-xs'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {mins}m
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Message Templates */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-slate-800 block">Quick Messages Templates:</label>
+              <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                {[
+                  'We are currently packing and preparing your items.',
+                  'The store is slightly busy. We are packing your order with care. Thanks for waiting!',
+                  'We are weighing your custom products right now. Ready in a few minutes!',
+                  'Items are being assembled. Final weight confirmation sent shortly.'
+                ].map((msg, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setCustomWaitingMessage(msg)}
+                    className={`w-full text-left p-2 rounded-xl text-[11px] font-medium border transition-all cursor-pointer ${
+                      customWaitingMessage === msg
+                        ? 'bg-sky-50 border-sky-200 text-sky-900'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-100 text-slate-600'
+                    }`}
+                  >
+                    "{msg}"
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Message Textarea */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-slate-800 block">Custom Waiting Message:</label>
+              <textarea
+                value={customWaitingMessage}
+                onChange={(e) => setCustomWaitingMessage(e.target.value)}
+                placeholder="Type custom waiting details..."
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAcceptOrder(acceptingOrderModal)}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>Direct Accept</span>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => handleAcceptOrder(acceptingOrderModal, customWaitingMessage, customWaitingTime)}
+                  className="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Clock className="w-4 h-4 text-white" />
+                  <span>Accept & Wait Msg</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setAcceptingOrderModal(null)}
+                className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Go Back
               </button>
             </div>
           </div>

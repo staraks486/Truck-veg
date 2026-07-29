@@ -85,6 +85,8 @@ export interface Order {
   paymentReminderSent?: boolean;
   paymentReminderMessage?: string;
   paymentReminderSentAt?: string;
+  waitingMessage?: string;
+  waitingTimeMinutes?: number;
 }
 
 export interface CustomerSession {
