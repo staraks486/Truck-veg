@@ -45,8 +45,7 @@ import {
   ArrowRight,
   ArrowLeft,
   X,
-  MoreHorizontal,
-  Download
+  MoreHorizontal
 } from 'lucide-react';
 import { exportToCSV } from '../utils/csvHelper';
 import { 
