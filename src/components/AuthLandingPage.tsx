@@ -274,7 +274,7 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                 Indian Mobile Number (+91)
               </label>
               <div className="relative flex items-center">
-                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg text-xs font-bold text-slate-700 border border-slate-200">
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg text-xs font-bold text-slate-700 border border-slate-300">
                   <span>🇮🇳</span>
                   <span>+91</span>
                 </div>
@@ -284,10 +284,10 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                   value={customerPhone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
                   placeholder="9876543210"
-                  className={`w-full pl-24 pr-4 py-3 border rounded-xl text-sm font-bold font-mono transition-all ${
+                  className={`w-full pl-24 pr-4 py-3 border-2 rounded-xl text-sm font-bold font-mono transition-all ${
                     isRegistering 
-                      ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' 
-                      : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B]'
+                      ? 'bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed' 
+                      : 'bg-white border-slate-950 text-black placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B]'
                   }`}
                   disabled={isRegistering}
                 />
@@ -311,7 +311,7 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                     if (customerError) setCustomerError('');
                   }}
                   placeholder="e.g. Alex Morgan"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B] transition-all"
+                  className="w-full px-4 py-3 bg-white border-2 border-slate-950 rounded-xl text-sm font-bold text-black placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B] transition-all"
                   autoFocus
                 />
               </motion.div>
@@ -378,7 +378,7 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                   }}
                   placeholder="Enter 4-digit PIN (1234)"
                   maxLength={10}
-                  className="w-full pl-10 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all tracking-widest"
+                  className="w-full pl-10 pr-12 py-3 bg-white border-2 border-slate-950 rounded-xl text-sm font-bold text-black placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all tracking-widest"
                 />
                 <button
                   type="button"

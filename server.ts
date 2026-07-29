@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
@@ -8,6 +9,66 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  // In-memory data store with file backing for persistence across server restarts
+  const STORE_FILE = path.join(process.cwd(), "server-store.json");
+  let serverStore: any = {
+    inventory: { data: null, updatedAt: 0 },
+    orders: { data: null, updatedAt: 0 },
+    customers: { data: null, updatedAt: 0 },
+    storeConfig: { data: null, updatedAt: 0 },
+    offers: { data: null, updatedAt: 0 },
+    expenses: { data: null, updatedAt: 0 },
+    campaignConfig: { data: null, updatedAt: 0 },
+  };
+
+  try {
+    if (fs.existsSync(STORE_FILE)) {
+      const rawData = JSON.parse(fs.readFileSync(STORE_FILE, "utf-8"));
+      for (const key of Object.keys(serverStore)) {
+        if (rawData[key] !== undefined && rawData[key] !== null) {
+          const item = rawData[key];
+          if (typeof item === 'object' && item !== null && "updatedAt" in item && "data" in item) {
+            serverStore[key] = item;
+          } else {
+            serverStore[key] = { data: item, updatedAt: Date.now() };
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load server store:", e);
+  }
+
+  function saveStoreToFile() {
+    try {
+      fs.writeFileSync(STORE_FILE, JSON.stringify(serverStore, null, 2), "utf-8");
+    } catch (e) {
+      console.error("Failed to save server store:", e);
+    }
+  }
+
+  // Real-time Sync Endpoints for Desktop-Mobile multi-device synchronization
+  app.get("/api/sync", (req, res) => {
+    res.json(serverStore);
+  });
+
+  app.post("/api/sync", (req, res) => {
+    const { type, data, updatedAt } = req.body;
+    if (type && type in serverStore) {
+      const incomingTime = updatedAt || Date.now();
+      const current = serverStore[type] || { data: null, updatedAt: 0 };
+      if (incomingTime > current.updatedAt) {
+        serverStore[type] = { data, updatedAt: incomingTime };
+        saveStoreToFile();
+        res.json({ success: true, updated: true, serverUpdatedAt: incomingTime });
+      } else {
+        res.json({ success: true, updated: false, serverUpdatedAt: current.updatedAt, reason: "Server contains newer data" });
+      }
+    } else {
+      res.status(400).json({ error: "Invalid sync type" });
+    }
+  });
 
   // API Health check
   app.get("/api/health", (req, res) => {

@@ -9,6 +9,57 @@ const STORE_CONFIG_KEY = 'qr_veg_store_config_v1';
 const OFFERS_KEY = 'qr_veg_offers_v1';
 const EXPENSES_KEY = 'qr_veg_expenses_v1';
 const CAMPAIGN_CONFIG_KEY = 'qr_veg_campaign_config_v1';
+const TIMESTAMPS_KEY = 'qr_veg_sync_timestamps_v1';
+
+export function getLocalTimestamp(type: string): number {
+  try {
+    const raw = localStorage.getItem(TIMESTAMPS_KEY);
+    const ts = raw ? JSON.parse(raw) : {};
+    return ts[type] || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+export function setLocalTimestamp(type: string, time: number) {
+  try {
+    const raw = localStorage.getItem(TIMESTAMPS_KEY);
+    const ts = raw ? JSON.parse(raw) : {};
+    ts[type] = time;
+    localStorage.setItem(TIMESTAMPS_KEY, JSON.stringify(ts));
+  } catch (e) {}
+}
+
+export async function pushToSyncServer(type: string, data: any, forceUpdatedAt?: number) {
+  const syncTypeMap: Record<string, string> = {
+    expenses: 'expenses',
+    campaign_config: 'campaignConfig',
+    offers: 'offers',
+    store_config: 'storeConfig',
+    customers: 'customers',
+    inventory: 'inventory',
+    orders: 'orders'
+  };
+
+  const serverType = syncTypeMap[type];
+  if (serverType) {
+    const updatedAt = forceUpdatedAt || Date.now();
+    setLocalTimestamp(serverType, updatedAt);
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ type: serverType, data, updatedAt }),
+      });
+    } catch (e) {
+      console.error(`Failed to sync ${type} with server:`, e);
+    }
+  }
+  
+  window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type } }));
+}
 
 export function getStoredExpenses(): ExpenseItem[] {
   try {
@@ -53,7 +104,8 @@ export function getStoredExpenses(): ExpenseItem[] {
 export function saveStoredExpenses(expenses: ExpenseItem[]) {
   try {
     localStorage.setItem(EXPENSES_KEY, JSON.stringify(expenses));
-    window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type: 'expenses' } }));
+    const now = Date.now();
+    pushToSyncServer('expenses', expenses, now);
   } catch (e) {
     console.error('Error saving expenses:', e);
   }
@@ -83,7 +135,8 @@ export function getStoredCampaignTrigger(): CampaignTriggerConfig {
 export function saveStoredCampaignTrigger(config: CampaignTriggerConfig) {
   try {
     localStorage.setItem(CAMPAIGN_CONFIG_KEY, JSON.stringify(config));
-    window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type: 'campaign_config' } }));
+    const now = Date.now();
+    pushToSyncServer('campaign_config', config, now);
   } catch (e) {
     console.error('Error saving campaign config:', e);
   }
@@ -125,7 +178,8 @@ export function getStoredOffers(): ProductOffer[] {
 export function saveStoredOffers(offers: ProductOffer[]) {
   try {
     localStorage.setItem(OFFERS_KEY, JSON.stringify(offers));
-    window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type: 'offers' } }));
+    const now = Date.now();
+    pushToSyncServer('offers', offers, now);
   } catch (e) {
     console.error('Error saving offers:', e);
   }
@@ -180,7 +234,8 @@ export function getStoredStoreConfig(): StoreConfig {
 export function saveStoredStoreConfig(config: StoreConfig) {
   try {
     localStorage.setItem(STORE_CONFIG_KEY, JSON.stringify(config));
-    window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type: 'store_config' } }));
+    const now = Date.now();
+    pushToSyncServer('store_config', config, now);
   } catch (e) {
     console.error('Error saving store config:', e);
   }
@@ -288,7 +343,8 @@ export function getStoredCustomers(): CustomerRecord[] {
 export function saveStoredCustomers(customers: CustomerRecord[]) {
   try {
     localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers));
-    window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type: 'customers' } }));
+    const now = Date.now();
+    pushToSyncServer('customers', customers, now);
   } catch (e) {
     console.error('Error saving customers:', e);
   }
@@ -457,7 +513,8 @@ export function getStoredInventory(): InventoryItem[] {
 export function saveStoredInventory(items: InventoryItem[]) {
   try {
     localStorage.setItem(INVENTORY_KEY, JSON.stringify(items));
-    window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type: 'inventory' } }));
+    const now = Date.now();
+    pushToSyncServer('inventory', items, now);
   } catch (e) {
     console.error('Error saving inventory:', e);
   }
@@ -491,7 +548,8 @@ export function getStoredOrders(): Order[] {
 export function saveStoredOrders(orders: Order[]) {
   try {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-    window.dispatchEvent(new CustomEvent('app-state-change', { detail: { type: 'orders' } }));
+    const now = Date.now();
+    pushToSyncServer('orders', orders, now);
   } catch (e) {
     console.error('Error saving orders:', e);
   }

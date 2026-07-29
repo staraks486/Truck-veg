@@ -10,7 +10,9 @@ import {
   getStoredCustomerSession,
   saveStoredCustomerSession,
   playChimeSound,
-  registerOrUpdateCustomer
+  registerOrUpdateCustomer,
+  getLocalTimestamp,
+  setLocalTimestamp
 } from './utils/storageManager';
 
 import { formatOrderWhatsAppMessage, openWhatsAppShare } from './utils/whatsappHelper';
@@ -46,7 +48,67 @@ export default function App() {
       setCustomerSession(getStoredCustomerSession());
     };
 
+    const syncWithServer = async () => {
+      try {
+        const response = await fetch('/api/sync');
+        if (!response.ok) return;
+        const serverData = await response.json();
+        
+        let changed = false;
+
+        const processSyncItem = (
+          serverType: string,
+          localKey: string,
+          setStateFn?: (data: any) => void
+        ) => {
+          const item = serverData[serverType];
+          if (!item) return;
+
+          // Support backward compatibility if server store doesn't have updatedAt wrapped format
+          const serverTime = typeof item === 'object' && item !== null && 'updatedAt' in item ? item.updatedAt : 0;
+          const serverDataVal = typeof item === 'object' && item !== null && 'data' in item ? item.data : item;
+
+          if (serverDataVal === null || serverDataVal === undefined) return;
+
+          const localTime = getLocalTimestamp(serverType);
+
+          // We only update if the server's update is strictly newer than our local change time,
+          // or if we have no local timestamp yet.
+          if (serverTime > localTime || localTime === 0) {
+            const rawLocal = localStorage.getItem(localKey);
+            const serverStr = JSON.stringify(serverDataVal);
+            if (rawLocal !== serverStr) {
+              localStorage.setItem(localKey, serverStr);
+              setLocalTimestamp(serverType, serverTime);
+              if (setStateFn) {
+                setStateFn(serverDataVal);
+              }
+              changed = true;
+            }
+          }
+        };
+
+        processSyncItem('inventory', 'qr_veg_inventory_v1', setInventory);
+        processSyncItem('orders', 'qr_veg_orders_v1', setOrders);
+        processSyncItem('customers', 'qr_veg_customer_records_v1');
+        processSyncItem('storeConfig', 'qr_veg_store_config_v1');
+        processSyncItem('offers', 'qr_veg_offers_v1');
+        processSyncItem('expenses', 'qr_veg_expenses_v1');
+        processSyncItem('campaignConfig', 'qr_veg_campaign_config_v1');
+
+        if (changed) {
+          loadAllData();
+        }
+      } catch (e) {
+        console.error('Failed to sync with server:', e);
+      }
+    };
+
     loadAllData();
+    syncWithServer(); // Sync immediately on mount
+
+    // Poll server every 2 seconds to keep multiple devices (Desktop & Mobile) in perfect sync
+    const syncInterval = setInterval(syncWithServer, 2000);
 
     const handleCustomStateChange = () => {
       loadAllData();
@@ -56,6 +118,7 @@ export default function App() {
     window.addEventListener('storage', handleCustomStateChange);
 
     return () => {
+      clearInterval(syncInterval);
       window.removeEventListener('app-state-change', handleCustomStateChange);
       window.removeEventListener('storage', handleCustomStateChange);
     };
