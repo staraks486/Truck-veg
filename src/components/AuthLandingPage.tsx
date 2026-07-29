@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserRole, CustomerSession } from '../types';
-import { getStoredStoreConfig } from '../utils/storageManager';
+import { getStoredStoreConfig, getStoredCustomers, registerOrUpdateCustomer } from '../utils/storageManager';
 import { Store, UserCheck, Shield, Lock, Phone, ArrowRight, CheckCircle2, Sparkles, Scale, QrCode } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -41,6 +41,7 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
   const [customerName, setCustomerName] = useState(customerSession.name || '');
   const [customerPhone, setCustomerPhone] = useState(customerSession.phone || '');
   const [customerError, setCustomerError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // Shopkeeper form state
   const [shopkeeperPin, setShopkeeperPin] = useState('');
@@ -49,18 +50,62 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
 
   const handleCustomerLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim()) {
-      setCustomerError('Please enter your name to proceed');
+    const phoneToUse = customerPhone.trim();
+    if (!phoneToUse || phoneToUse.length < 10) {
+      setCustomerError('Please enter a valid 10-digit mobile number');
       return;
     }
-    const phoneToUse = customerPhone.trim() || '9876543210';
-    onSaveSession({
-      ...customerSession,
-      name: customerName.trim(),
-      phone: phoneToUse,
-      isLoggedIn: true
-    });
-    onSelectRole('customer', customerName.trim(), phoneToUse);
+
+    if (!isRegistering) {
+      // Step 1: Check if mobile number exists
+      const customers = getStoredCustomers();
+      const inputDigits = phoneToUse.replace(/\D/g, '');
+      const existingCustomer = customers.find(c => {
+        const cDigits = c.phone.replace(/\D/g, '');
+        return cDigits === inputDigits || (cDigits.slice(-10) === inputDigits.slice(-10) && inputDigits.length >= 10);
+      });
+
+      if (existingCustomer) {
+        // Mobile number exists! Log them in directly
+        setCustomerName(existingCustomer.name);
+        onSaveSession({
+          ...customerSession,
+          name: existingCustomer.name,
+          phone: phoneToUse,
+          isLoggedIn: true
+        });
+        registerOrUpdateCustomer(existingCustomer.name, phoneToUse);
+        onSelectRole('customer', existingCustomer.name, phoneToUse);
+      } else {
+        // Mobile number does not exist! Prompt for registration name
+        setIsRegistering(true);
+        setCustomerError('');
+      }
+    } else {
+      // Step 2: Registering a new customer
+      if (!customerName.trim()) {
+        setCustomerError('Please enter your name to register');
+        return;
+      }
+      onSaveSession({
+        ...customerSession,
+        name: customerName.trim(),
+        phone: phoneToUse,
+        isLoggedIn: true
+      });
+      registerOrUpdateCustomer(customerName.trim(), phoneToUse);
+      onSelectRole('customer', customerName.trim(), phoneToUse);
+    }
+  };
+
+  const handlePhoneChange = (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 10);
+    setCustomerPhone(clean);
+    if (isRegistering) {
+      setIsRegistering(false);
+      setCustomerName('');
+    }
+    if (customerError) setCustomerError('');
   };
 
   const handleShopkeeperLogin = (e: React.FormEvent) => {
@@ -193,31 +238,36 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
         {step === 'customer-form' && (
           <form onSubmit={handleCustomerLogin} className="space-y-4 max-w-sm mx-auto">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-black text-slate-900">Customer Access</h2>
+              <h2 className="text-xl font-black text-slate-900">
+                {isRegistering ? 'Register Account' : 'Customer Access'}
+              </h2>
               <button 
                 type="button" 
-                onClick={() => setStep('intro')}
+                onClick={() => {
+                  if (isRegistering) {
+                    setIsRegistering(false);
+                    setCustomerError('');
+                  } else {
+                    setStep('intro');
+                  }
+                }}
                 className="text-xs text-slate-400 hover:text-slate-600 font-bold"
               >
                 Back
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Your Name <span className="text-emerald-600">*</span>
-              </label>
-              <input
-                type="text"
-                value={customerName}
-                onChange={(e) => {
-                  setCustomerName(e.target.value);
-                  if (customerError) setCustomerError('');
-                }}
-                placeholder="e.g. Alex Morgan"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B] transition-all"
-              />
-            </div>
+            {isRegistering && (
+              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-black text-emerald-800">New Mobile Number detected</h4>
+                  <p className="text-[11px] font-semibold text-emerald-600/95 mt-0.5 leading-relaxed">
+                    Please provide your name below to instantly set up your customer account.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -232,12 +282,40 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                   type="tel"
                   maxLength={10}
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
                   placeholder="9876543210"
-                  className="w-full pl-24 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B] transition-all font-mono"
+                  className={`w-full pl-24 pr-4 py-3 border rounded-xl text-sm font-bold font-mono transition-all ${
+                    isRegistering 
+                      ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' 
+                      : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B]'
+                  }`}
+                  disabled={isRegistering}
                 />
               </div>
             </div>
+
+            {isRegistering && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="space-y-1.5"
+              >
+                <label className="block text-xs font-bold text-slate-700">
+                  Your Name <span className="text-emerald-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => {
+                    setCustomerName(e.target.value);
+                    if (customerError) setCustomerError('');
+                  }}
+                  placeholder="e.g. Alex Morgan"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#57864B]/30 focus:border-[#57864B] transition-all"
+                  autoFocus
+                />
+              </motion.div>
+            )}
 
             {customerError && (
               <p className="text-xs font-bold text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
@@ -250,7 +328,9 @@ export const AuthLandingPage: React.FC<AuthLandingPageProps> = ({
                 type="submit"
                 className="w-full py-4 rounded-2xl font-black text-sm bg-[#57864B] hover:bg-[#476d3d] text-white transition-all shadow-lg shadow-[#57864B]/30 flex items-center justify-center gap-2 group cursor-pointer"
               >
-                <span>Start Shopping & Weighing</span>
+                <span>
+                  {isRegistering ? 'Register & Start Shopping' : 'Continue'}
+                </span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
