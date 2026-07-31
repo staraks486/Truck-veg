@@ -111,6 +111,9 @@ export interface CustomerRecord {
   notes?: string;
   totalOrders?: number;
   totalSpent?: number;
+  verificationCode?: string;
+  isWhatsAppVerified?: boolean;
+  status?: 'pending_verification' | 'active' | 'suspended';
 }
 
 export interface ProductOffer {

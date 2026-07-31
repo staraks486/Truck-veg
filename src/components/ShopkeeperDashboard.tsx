@@ -47,7 +47,8 @@ import {
   ArrowRight,
   ArrowLeft,
   X,
-  MoreHorizontal
+  MoreHorizontal,
+  ArrowUpDown
 } from 'lucide-react';
 import { exportToCSV } from '../utils/csvHelper';
 import { 
@@ -61,6 +62,7 @@ import {
   getStoredOffers,
   saveStoredOffers,
   getStoredCustomers,
+  saveStoredCustomers,
   deleteStoredCustomer,
   clearAllStoredCustomers,
   getDeletedCustomerPhones,
@@ -293,6 +295,41 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
   // Multi-customer filter state
   const [selectedCustomerFilter, setSelectedCustomerFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [customerSort, setCustomerSort] = useState<'latest_order' | 'highest_spent' | 'most_orders' | 'name_asc'>('latest_order');
+
+  const sortedAndFilteredCustomers = useMemo(() => {
+    const filtered = customersList.filter(
+      (c) =>
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.phone.includes(searchQuery)
+    );
+
+    const getStats = (cust: typeof customersList[0]) => {
+      const ordersCount = cust.totalOrders || orders.filter(o => o.customerPhone === cust.phone).length;
+      const spentTotal = cust.totalSpent || orders.filter(o => o.customerPhone === cust.phone).reduce((a, o) => a + o.grandTotal, 0);
+      const lastActiveTime = new Date(cust.lastActive || cust.createdAt || 0).getTime();
+      return { ordersCount, spentTotal, lastActiveTime };
+    };
+
+    return [...filtered].sort((a, b) => {
+      const statsA = getStats(a);
+      const statsB = getStats(b);
+
+      if (customerSort === 'highest_spent') {
+        return statsB.spentTotal - statsA.spentTotal;
+      }
+      if (customerSort === 'most_orders') {
+        return statsB.ordersCount - statsA.ordersCount;
+      }
+      if (customerSort === 'latest_order') {
+        return statsB.lastActiveTime - statsA.lastActiveTime;
+      }
+      if (customerSort === 'name_asc') {
+        return a.name.localeCompare(b.name);
+      }
+      return 0;
+    });
+  }, [customersList, searchQuery, customerSort, orders]);
 
   const handleCompletePosSale = () => {
     if (posCart.length === 0) {
@@ -738,6 +775,27 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
     setCustomerToDelete({ idOrPhone: customerIdOrPhone, name: customerName });
   };
 
+  const handleApproveWhatsAppVerification = (cust: CustomerRecord) => {
+    const updated = customersList.map(c => {
+      if (c.id === cust.id) {
+        return { ...c, isWhatsAppVerified: true, status: 'active' as const };
+      }
+      return c;
+    });
+    saveStoredCustomers(updated);
+    setCustomersList(updated);
+    playChimeSound('order_approved');
+    toast.success(`WhatsApp number +91 ${cust.phone} verified successfully!`);
+  };
+
+  const handleRejectWhatsAppVerification = (cust: CustomerRecord) => {
+    const updated = customersList.filter(c => c.id !== cust.id);
+    saveStoredCustomers(updated);
+    setCustomersList(updated);
+    playChimeSound('order_rejected');
+    toast.error(`Verification request for +91 ${cust.phone} rejected.`);
+  };
+
   const handleClearAllCustomers = () => {
     setIsClearAllCustomersModalOpen(true);
   };
@@ -1085,7 +1143,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                     <label className="text-[11px] font-bold text-slate-600 block mb-1">Name</label>
                     <input
                       type="text"
-                      value={posCustomerName}
+                      value={posCustomerName || ''}
                       onChange={(e) => setPosCustomerName(e.target.value)}
                       placeholder="Walk-in Customer"
                       className="w-full px-3 py-2 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -1095,7 +1153,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                     <label className="text-[11px] font-bold text-slate-600 block mb-1">Mobile No.</label>
                     <input
                       type="text"
-                      value={posCustomerPhone}
+                      value={posCustomerPhone || ''}
                       onChange={(e) => setPosCustomerPhone(e.target.value)}
                       placeholder="9999999999"
                       className="w-full px-3 py-2 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -1975,7 +2033,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                 <label className="text-xs font-bold text-slate-700 block mb-1.5">Customer Name</label>
                 <input
                   type="text"
-                  value={posCustomerName}
+                  value={posCustomerName || ''}
                   onChange={(e) => setPosCustomerName(e.target.value)}
                   placeholder="Walk-in Customer"
                   className="w-full px-3.5 py-2.5 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -1985,7 +2043,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                 <label className="text-xs font-bold text-slate-700 block mb-1.5">Mobile Number</label>
                 <input
                   type="text"
-                  value={posCustomerPhone}
+                  value={posCustomerPhone || ''}
                   onChange={(e) => setPosCustomerPhone(e.target.value)}
                   placeholder="9999999999"
                   className="w-full px-3.5 py-2.5 bg-white text-xs border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -2366,7 +2424,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                   <label className="text-xs font-extrabold text-slate-700 block mb-1">Store Name</label>
                   <input
                     type="text"
-                    value={storeConfig.name}
+                    value={storeConfig.name || ''}
                     onChange={(e) => setStoreConfig({ ...storeConfig, name: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 text-sm border border-slate-300 rounded-xl font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     required
@@ -2377,7 +2435,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                   <label className="text-xs font-extrabold text-slate-700 block mb-1">Branch Designation</label>
                   <input
                     type="text"
-                    value={storeConfig.branch}
+                    value={storeConfig.branch || ''}
                     onChange={(e) => setStoreConfig({ ...storeConfig, branch: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 text-sm border border-slate-300 rounded-xl font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     required
@@ -2388,7 +2446,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
               <div>
                 <label className="text-xs font-extrabold text-slate-700 block mb-1">Store Address / Plot Location</label>
                 <textarea
-                  value={storeConfig.address}
+                  value={storeConfig.address || ''}
                   onChange={(e) => setStoreConfig({ ...storeConfig, address: e.target.value })}
                   rows={2}
                   className="w-full px-4 py-2.5 bg-slate-50 text-sm border border-slate-300 rounded-xl font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
@@ -2401,7 +2459,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                   <label className="text-xs font-extrabold text-slate-700 block mb-1">WhatsApp Support Phone</label>
                   <input
                     type="text"
-                    value={storeConfig.phone}
+                    value={storeConfig.phone || ''}
                     onChange={(e) => setStoreConfig({ ...storeConfig, phone: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 text-sm border border-slate-300 rounded-xl font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     required
@@ -2412,7 +2470,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                   <label className="text-xs font-extrabold text-slate-700 block mb-1">UPI VPA ID (for payments)</label>
                   <input
                     type="text"
-                    value={storeConfig.upiId}
+                    value={storeConfig.upiId || ''}
                     onChange={(e) => setStoreConfig({ ...storeConfig, upiId: e.target.value })}
                     className="w-full px-4 py-2.5 bg-slate-50 text-sm border border-slate-300 rounded-xl font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     required
@@ -2424,7 +2482,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                 <label className="text-xs font-extrabold text-slate-700 block mb-1">Operating Hours</label>
                 <input
                   type="text"
-                  value={storeConfig.operatingHours}
+                  value={storeConfig.operatingHours || ''}
                   onChange={(e) => setStoreConfig({ ...storeConfig, operatingHours: e.target.value })}
                   className="w-full px-4 py-2.5 bg-slate-50 text-sm border border-slate-300 rounded-xl font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                   required
@@ -3274,13 +3332,82 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
             </div>
           </div>
 
+          {/* Pending WhatsApp Verifications Widget */}
+          {customersList.some(c => c.status === 'pending_verification') && (
+            <div className="bg-amber-50 border-2 border-dashed border-amber-300 p-6 rounded-3xl shadow-sm space-y-4">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-amber-600 animate-pulse" />
+                <h4 className="font-black text-base text-amber-900">
+                  Pending Live WhatsApp Verifications ({customersList.filter(c => c.status === 'pending_verification').length})
+                </h4>
+              </div>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                The customers below are currently trying to register or log in on their devices. Please verify if you have received the message with their code on your phone's WhatsApp, then tap <b>Approve</b> to grant them instant access!
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {customersList
+                  .filter(c => c.status === 'pending_verification')
+                  .map((pending) => {
+                    const cleanPhone = pending.phone.replace(/\D/g, '');
+                    const codeVal = pending.verificationCode || '0000';
+                    const pinVal = ((parseInt(codeVal) * 31 + parseInt(cleanPhone.slice(-4))) % 9000 + 1000).toString();
+
+                    return (
+                      <div key={pending.id} className="bg-white p-4 rounded-2xl border border-amber-200 shadow-xs flex flex-col justify-between gap-3 text-left">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h5 className="font-black text-sm text-slate-900">{pending.name}</h5>
+                            <p className="text-xs font-mono text-slate-500 mt-0.5">+91 {pending.phone}</p>
+                          </div>
+                          <span className="text-[10px] uppercase tracking-wider text-amber-800 font-extrabold bg-amber-100 px-2.5 py-0.5 rounded-full">
+                            Pending Approval
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100 text-xs">
+                          <div>
+                            <span className="text-[9px] text-slate-400 block font-bold uppercase">WhatsApp Msg Code</span>
+                            <span className="font-black text-amber-800 font-mono text-sm">{codeVal}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 block font-bold uppercase">Expected Reply PIN</span>
+                            <span className="font-black text-indigo-700 font-mono text-sm">{pinVal}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveWhatsAppVerification(pending)}
+                            className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Approve &amp; Verify</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectWhatsAppVerification(pending)}
+                            className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs rounded-xl border border-rose-200 transition-colors cursor-pointer flex items-center justify-center"
+                            title="Reject/Ignore Request"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3 pb-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-emerald-600" />
                 <h4 className="font-black text-base text-slate-900">Registered Customer Profiles</h4>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
@@ -3288,9 +3415,27 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search by name or phone..."
-                    className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none w-60"
+                    className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none w-48 sm:w-60"
                   />
                 </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500 font-extrabold flex items-center gap-1 whitespace-nowrap">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="hidden sm:inline">Sort:</span>
+                  </span>
+                  <select
+                    value={customerSort}
+                    onChange={(e: any) => setCustomerSort(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 outline-none cursor-pointer hover:bg-slate-100 transition-all focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value="latest_order">Latest Active</option>
+                    <option value="highest_spent">Highest Spent</option>
+                    <option value="most_orders">Most Orders</option>
+                    <option value="name_asc">Name (A-Z)</option>
+                  </select>
+                </div>
+
                 {customersList.length > 0 && (
                   <div className="flex items-center gap-2">
                     <button
@@ -3312,7 +3457,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                       title="Export customer CRM to CSV"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>Export CSV</span>
+                      <span className="hidden md:inline">Export CSV</span>
                     </button>
                     <button
                       type="button"
@@ -3321,7 +3466,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
                       title="Clear all customer profiles"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Clear All</span>
+                      <span className="hidden md:inline">Clear All</span>
                     </button>
                   </div>
                 )}
@@ -3351,8 +3496,7 @@ export const ShopkeeperDashboard: React.FC<ShopkeeperDashboardProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {customersList
-                  .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.phone.includes(searchQuery))
+                {sortedAndFilteredCustomers
                   .map((cust) => {
                     const ordersCount = cust.totalOrders || orders.filter(o => o.customerPhone === cust.phone).length;
                     const spentTotal = cust.totalSpent || orders.filter(o => o.customerPhone === cust.phone).reduce((a, o) => a + o.grandTotal, 0);

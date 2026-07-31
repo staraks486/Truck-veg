@@ -58,7 +58,7 @@ export async function pushToSyncServer(type: string, data: any, forceUpdatedAt?:
         body: JSON.stringify({ type: serverType, data, updatedAt, schemaVersion: SCHEMA_VERSION }),
       });
     } catch (e) {
-      console.error(`Failed to sync ${type} with server:`, e);
+      console.warn(`Failed to sync ${type} with server (offline/retry pending):`, e);
     }
   }
   

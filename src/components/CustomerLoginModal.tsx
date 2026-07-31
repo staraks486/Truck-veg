@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Phone, ShieldCheck, Sparkles, CheckCircle2, Trash2 } from 'lucide-react';
 import { CustomerSession } from '../types';
 import { registerOrUpdateCustomer, getStoredCustomers, saveStoredCustomers, deleteStoredCustomer, playChimeSound } from '../utils/storageManager';
@@ -19,6 +19,14 @@ export const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({
   const [name, setName] = useState(session.name || '');
   const [phone, setPhone] = useState(session.phone || '');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(session.name || '');
+      setPhone(session.phone || '');
+      setError('');
+    }
+  }, [isOpen, session.name, session.phone]);
 
   if (!isOpen) return null;
 
@@ -150,7 +158,7 @@ export const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({
                 <input
                   type="text"
                   required
-                  value={name}
+                  value={name || ''}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Priya Sharma"
                   className="w-full pl-9 pr-3 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-medium"
@@ -171,7 +179,7 @@ export const CustomerLoginModal: React.FC<CustomerLoginModalProps> = ({
                   type="tel"
                   required
                   maxLength={10}
-                  value={phone}
+                  value={phone || ''}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   placeholder="9876543210"
                   className="w-full pl-24 pr-3 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-mono font-bold"

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Order } from '../types';
-import { X, CheckCircle2, QrCode, Printer, Clock, AlertTriangle, ShieldCheck, Sparkles, Phone, Download, MessageSquare, FileText, XCircle, CreditCard, DollarSign } from 'lucide-react';
+import { X, CheckCircle2, QrCode, Printer, Clock, AlertTriangle, ShieldCheck, Sparkles, Phone, Download, MessageSquare, FileText, XCircle, CreditCard, DollarSign, Wifi } from 'lucide-react';
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import { formatCurrency, formatWeightOrUnits } from '../utils/storageManager';
@@ -34,6 +34,66 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('Changed my mind');
   const [customNote, setCustomNote] = useState('');
+
+  // NFC Tap-to-Pay States
+  const [showNfcTerminal, setShowNfcTerminal] = useState(false);
+  const [nfcTerminalStatus, setNfcTerminalStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+
+  // Web Audio Synthesizer for NFC beep/chime
+  const playTerminalSound = (soundType: 'chirp' | 'error') => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      if (soundType === 'chirp') {
+        osc.frequency.setValueAtTime(1200, ctx.currentTime);
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        osc.start();
+        
+        setTimeout(() => {
+          osc.frequency.setValueAtTime(1500, ctx.currentTime);
+        }, 80);
+        
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.22);
+        osc.stop(ctx.currentTime + 0.22);
+      } else {
+        osc.frequency.setValueAtTime(180, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+        osc.stop(ctx.currentTime + 0.35);
+      }
+    } catch (e) {
+      console.warn('Audio synthesis failed', e);
+    }
+  };
+
+  const handleOpenNfcPaymentTerminal = () => {
+    setShowNfcTerminal(true);
+    setNfcTerminalStatus('scanning');
+    
+    // Start real Web NFC scanning if supported
+    if ('NDEFReader' in window) {
+      const ndef = new (window as any).NDEFReader();
+      ndef.scan().then(() => {
+        ndef.onreading = (event: any) => {
+          playTerminalSound('chirp');
+          setNfcTerminalStatus('success');
+          setTimeout(() => {
+            setShowNfcTerminal(false);
+            handleSimulatePayment('Card');
+          }, 850);
+        };
+      }).catch((err: any) => {
+        console.warn('Real Web NFC Payment tap not active, using fallback simulator', err);
+      });
+    }
+  };
 
   useEffect(() => {
     if (order && order.grandTotal > 0) {
@@ -337,12 +397,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   Select Payment Method to Complete Order:
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => handleSimulatePayment('UPI')}
                     disabled={isProcessingPayment}
-                    className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
+                    className="py-2.5 px-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1 cursor-pointer"
                   >
                     <CheckCircle2 className="w-4 h-4 text-emerald-200" />
                     <span>Pay UPI</span>
@@ -352,7 +412,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     type="button"
                     onClick={() => handleSimulatePayment('Cash')}
                     disabled={isProcessingPayment}
-                    className="py-2.5 px-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
+                    className="py-2.5 px-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1 cursor-pointer"
                   >
                     <DollarSign className="w-4 h-4 text-amber-200" />
                     <span>Pay Cash</span>
@@ -362,10 +422,23 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                     type="button"
                     onClick={() => handleSimulatePayment('Card')}
                     disabled={isProcessingPayment}
-                    className="py-2.5 px-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1"
+                    className="py-2.5 px-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1 cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4 text-indigo-200" />
-                    <span>Pay Card</span>
+                    <span>Swipe Card</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenNfcPaymentTerminal}
+                    disabled={isProcessingPayment}
+                    className="py-2.5 px-1.5 bg-slate-900 hover:bg-black text-white font-extrabold text-xs rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 flex flex-col items-center justify-center gap-1 relative overflow-hidden cursor-pointer"
+                  >
+                    <Wifi className="w-4 h-4 text-emerald-400 rotate-90 shrink-0 animate-pulse" />
+                    <span>NFC Tap</span>
+                    <span className="absolute top-0.5 right-1 text-[7px] bg-emerald-500 text-slate-950 font-black px-1 rounded uppercase tracking-wider scale-90">
+                      TAP
+                    </span>
                   </button>
                 </div>
 
@@ -602,6 +675,103 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   <XCircle className="w-4 h-4" />
                   <span>Confirm Cancellation</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NFC Terminal Overlay Modal */}
+        {showNfcTerminal && (
+          <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-sm animate-fadeIn text-slate-800">
+            <div className="bg-slate-950 rounded-3xl shadow-2xl max-w-sm w-full p-6 border border-slate-800 space-y-4 text-white relative overflow-hidden text-left">
+              <div className="absolute inset-0 bg-radial from-emerald-500/5 via-transparent to-transparent pointer-events-none" />
+              
+              <div className="flex justify-between items-center relative z-10">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-emerald-500 rounded-xl text-slate-950 animate-pulse">
+                    <Wifi className="w-4 h-4 rotate-90" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs text-white">Farmer's Gate Terminal</h3>
+                    <p className="text-[9px] text-slate-400 font-mono font-bold">NFC Contactless Pay v2.1</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNfcTerminal(false)}
+                  className="p-1 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-400 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Display POS Amount Screen */}
+              <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 space-y-1.5 text-center relative z-10">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">TAP PHONE OR CARD TO PAY</p>
+                <div className="text-2xl font-black font-mono text-emerald-400">
+                  {formatCurrency(order.grandTotal)}
+                </div>
+                <p className="text-[10px] text-slate-500 font-mono font-bold">Order ID: #{order.id.slice(-6).toUpperCase()}</p>
+              </div>
+
+              {/* NFC Antenna Ripple Waves */}
+              <div className="py-8 bg-slate-900/50 border border-slate-900 rounded-2xl flex flex-col items-center justify-center text-center relative z-10">
+                <div className="relative flex items-center justify-center w-16 h-16 mb-2">
+                  {/* Ripple Wave loops */}
+                  <div className="absolute inset-0 rounded-full bg-emerald-500/10 border border-emerald-500/20 animate-ping" />
+                  <div className="absolute w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/30 animate-pulse" />
+                  <div className="w-8 h-8 bg-emerald-500 text-slate-950 rounded-full flex items-center justify-center shadow-md relative z-10">
+                    <Wifi className="w-4 h-4 rotate-90" />
+                  </div>
+                </div>
+
+                <p className="text-xs font-black text-emerald-400 tracking-widest uppercase">
+                  READY TO TAP
+                </p>
+                <p className="text-[10px] text-slate-400 font-medium mt-1 px-4 leading-normal">
+                  Hold your NFC payment card, Google Pay, or Apple Pay device near the sensor.
+                </p>
+              </div>
+
+              {/* Simulator buttons */}
+              <div className="space-y-2 relative z-10">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  Simulate Customer Tap:
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTerminalSound('chirp');
+                      setNfcTerminalStatus('success');
+                      setTimeout(() => {
+                        setShowNfcTerminal(false);
+                        handleSimulatePayment('Card');
+                      }, 750);
+                    }}
+                    className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>Tap Bank Card</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playTerminalSound('chirp');
+                      setNfcTerminalStatus('success');
+                      setTimeout(() => {
+                        setShowNfcTerminal(false);
+                        handleSimulatePayment('Card');
+                      }, 750);
+                    }}
+                    className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Wifi className="w-4 h-4 rotate-90" />
+                    <span>Tap Google Pay</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

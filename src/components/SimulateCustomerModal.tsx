@@ -200,7 +200,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
                   <input
                     type="text"
                     required
-                    value={customName}
+                    value={customName || ''}
                     onChange={(e) => setCustomName(e.target.value)}
                     placeholder="e.g. Ananya Roy"
                     className="w-full p-2 bg-white text-xs border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-emerald-500"
@@ -213,7 +213,7 @@ export const SimulateCustomerModal: React.FC<SimulateCustomerModalProps> = ({
                   <input
                     type="text"
                     required
-                    value={customPhone}
+                    value={customPhone || ''}
                     onChange={(e) => setCustomPhone(e.target.value)}
                     placeholder="e.g. +91 98123 45678"
                     className="w-full p-2 bg-white text-xs border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-emerald-500"

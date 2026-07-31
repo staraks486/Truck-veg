@@ -26,6 +26,7 @@ import { CartDrawer } from './components/CartDrawer';
 import { ReceiptModal } from './components/ReceiptModal';
 import { CustomerLoginModal } from './components/CustomerLoginModal';
 import { QRScannerModal } from './components/QRScannerModal';
+import { NFCScannerModal } from './components/NFCScannerModal';
 import { AuthLandingPage } from './components/AuthLandingPage';
 
 export default function App() {
@@ -40,6 +41,7 @@ export default function App() {
   // Modals state
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isQRScannerModalOpen, setIsQRScannerModalOpen] = useState(false);
+  const [isNFCScannerModalOpen, setIsNFCScannerModalOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [activeReceiptOrder, setActiveReceiptOrder] = useState<Order | null>(null);
   const [isOutdatedVersion, setIsOutdatedVersion] = useState(false);
@@ -185,7 +187,7 @@ export default function App() {
           }
         };
       } catch (err) {
-        console.error('Error starting EventSource stream:', err);
+        console.warn('Error starting EventSource stream (will retry):', err);
         sseActive = false;
         setSyncStatus('error');
       }
@@ -208,7 +210,7 @@ export default function App() {
         handleServerSyncData(serverData);
         setSyncStatus('synced');
       } catch (e) {
-        console.error('Failed fallback HTTP sync:', e);
+        console.warn('Fallback HTTP sync deferred (offline or server starting):', e);
         setSyncStatus('error');
       }
     };
@@ -1163,6 +1165,7 @@ export default function App() {
             onOpenCart={() => setIsCartOpen(true)}
             session={customerSession}
             onOpenQRScanner={() => setIsQRScannerModalOpen(true)}
+            onOpenNFCScanner={() => setIsNFCScannerModalOpen(true)}
             onOpenLogin={() => setIsLoginModalOpen(true)}
             activeOrder={activeCustomerOrder}
             onViewReceipt={(order) => setActiveReceiptOrder(order)}
@@ -1225,6 +1228,22 @@ export default function App() {
         isOpen={isQRScannerModalOpen}
         onClose={() => setIsQRScannerModalOpen(false)}
         onScanSuccess={handleScanStoreSuccess}
+      />
+
+      {/* NFC Scanner Modal */}
+      <NFCScannerModal
+        isOpen={isNFCScannerModalOpen}
+        onClose={() => setIsNFCScannerModalOpen(false)}
+        inventory={inventory}
+        onScanSuccess={(item, gramsOrCount) => {
+          handleAddToCart({
+            itemId: item.id,
+            quantityOrWeight: gramsOrCount,
+            calculatedPrice: item.pricePerUnit * (item.unitType === 'kg' ? gramsOrCount / 1000 : gramsOrCount),
+            item: item
+          });
+          toast.success(`Added ${item.name} via NFC shelf tag tap!`);
+        }}
       />
 
       {/* Receipt Modal */}

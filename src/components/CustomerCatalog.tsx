@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { InventoryItem, Category, CartItem, CustomerSession, Order } from '../types';
 import { ProductCard } from './ProductCard';
-import { Search, Mic, Home, Tag as OfferTag, User, ChevronRight, ShoppingBag, QrCode, LogOut, Bell, Trash2, Truck, MapPin, Store, AlertTriangle, Tag, Sparkles, Check, ShieldCheck, Receipt, RotateCcw, CheckCircle2, XCircle, Clock, Percent } from 'lucide-react';
+import { Search, Mic, Home, Tag as OfferTag, User, ChevronRight, ShoppingBag, QrCode, LogOut, Bell, Trash2, Truck, MapPin, Store, AlertTriangle, Tag, Sparkles, Check, ShieldCheck, Receipt, RotateCcw, CheckCircle2, XCircle, Clock, Percent, Wifi } from 'lucide-react';
 import { formatCurrency, formatWeightOrUnits, getStoredStoreConfig, StoreConfig } from '../utils/storageManager';
 import { AppliedPromo, PRESET_PROMO_CODES, parsePromoCode, calculatePromoDiscount } from '../utils/promoManager';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ interface CustomerCatalogProps {
   onOpenCart: () => void;
   session: CustomerSession;
   onOpenQRScanner: () => void;
+  onOpenNFCScanner: () => void;
   onOpenLogin: () => void;
   activeOrder?: Order | null;
   onViewReceipt?: (order: Order) => void;
@@ -52,6 +53,7 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
   onClearCart,
   session,
   onOpenQRScanner,
+  onOpenNFCScanner,
   onLogout,
   orders = [],
   onSubmitOrder,
@@ -349,6 +351,29 @@ export const CustomerCatalog: React.FC<CustomerCatalogProps> = ({
             />
             <button className="absolute right-3.5 text-gray-400 hover:text-gray-600">
               <Mic className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Quick Scan & NFC Tap-to-Shop Shortcuts */}
+          <div className="mt-3 grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={onOpenQRScanner}
+              className="py-3 px-4 bg-white hover:bg-emerald-50/50 text-slate-800 hover:text-emerald-950 rounded-xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] border border-gray-150 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer font-bold text-xs"
+            >
+              <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Barcode / QR Scanner</span>
+            </button>
+            <button
+              type="button"
+              onClick={onOpenNFCScanner}
+              className="py-3 px-4 bg-white hover:bg-emerald-50/50 text-slate-800 hover:text-emerald-950 rounded-xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] border border-gray-150 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer font-bold text-xs relative overflow-hidden"
+            >
+              <Wifi className="w-4 h-4 text-emerald-600 rotate-90 shrink-0 animate-pulse" />
+              <span className="truncate">NFC Tap-to-Shop</span>
+              <span className="absolute top-0.5 right-1.5 text-[8px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 rounded-full uppercase scale-85 border border-emerald-200">
+                RFID
+              </span>
             </button>
           </div>
         </div>
